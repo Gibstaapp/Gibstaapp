@@ -3,6 +3,7 @@ import type { Store } from '@gib/shared';
 import { checkIn, earnedBadges, placeBadge, visitsToNext, type VisitLog } from '@gib/shared';
 import { parsePrices } from '../src/beer/extract.ts';
 import { mergeResults, parseGrams } from '../src/normalize.ts';
+import { repairPackWeight } from '../src/sanitize.ts';
 
 // Real snippets from bar websites that used to produce wrong "beer prices".
 describe('beer prices: things that are not a beer price', () => {
@@ -45,6 +46,17 @@ describe('pre-roll pack weights', () => {
     expect(parseGrams('Mini Dogwalkers 5pk 0.35g')).toBe(1.75);
     expect(parseGrams('Shorties 10pk 0.35g')).toBe(3.5);
     expect(parseGrams('0.5g x 5')).toBe(2.5);
+  });
+});
+
+describe('old data with wrong pack weights is repaired', () => {
+  const p = (name: string, grams: number) => ({ id: name, storeId: 's', source: 'dutchie' as const, name, category: 'preroll' as const, grams, price: 20 });
+  it('fixes count x weight, leaves everything else alone', () => {
+    expect(repairPackWeight(p('West Coast Cure - GMO (Indica) 6pk Minis Preroll 2.1g', 12.6)).grams).toBe(2.1);
+    expect(repairPackWeight(p('Modified Mints Sungrown Pre-Roll 14pk 7g', 98)).grams).toBe(7);
+    expect(repairPackWeight(p('Mini Dogwalkers 5pk 0.35g', 1.75)).grams).toBe(1.75);
+    expect(repairPackWeight(p('Modified Mints Sungrown Pre-Roll 14pk 7g', 7)).grams).toBe(7);
+    expect(repairPackWeight(p('Blue Dream 1g', 1)).grams).toBe(1);
   });
 });
 
