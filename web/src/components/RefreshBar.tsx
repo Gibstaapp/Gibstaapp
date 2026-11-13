@@ -11,7 +11,7 @@ function ago(iso?: string) {
   return h < 24 ? `${h}h ago` : new Date(iso).toLocaleDateString();
 }
 
-const SOURCE_NAMES: Record<string, string> = { osm: 'Places (OpenStreetMap)', 'bar-websites': 'Bar websites', 'athens-places': 'Athens places (OpenStreetMap)', 'athens-menus': 'Athens bar menus (€)' };
+const SOURCE_NAMES: Record<string, string> = { osm: 'Places (OpenStreetMap)', 'bar-websites': 'Bar websites', 'athens-places': 'Athens places (OpenStreetMap)', 'athens-menus': 'Athens bar menus (€)', 'nyc-places': 'New York places (OpenStreetMap)', 'nyc-bar-websites': 'New York bar websites' };
 
 /** Refresh button + "updated X ago" + per-source status (tap to see which sources failed). */
 export default function RefreshBar({ onRefreshed, statusFn = api.status, refreshFn = api.refresh, accent = 'weed' }: {
@@ -45,9 +45,10 @@ export default function RefreshBar({ onRefreshed, statusFn = api.status, refresh
 
   return (
     <div className="relative flex items-center gap-2">
-      <button onClick={() => setShowDetail(!showDetail)} className="text-xs text-zinc-400 text-right whitespace-nowrap" title="When prices were last updated">
-        {status?.running ? 'Refreshing…' : <><span className="hidden sm:inline">Updated </span>{ago(status?.lastRefreshAt)}</>}
-        {failed.length > 0 && <span className="text-amber-400"> · {failed.length} source{failed.length > 1 ? 's' : ''} failed</span>}
+      {/* On phones the two parts stack, so they never run into the Weed/Beer switch. */}
+      <button onClick={() => setShowDetail(!showDetail)} className="text-xs text-zinc-400 text-right whitespace-nowrap leading-tight flex flex-col items-end sm:flex-row sm:gap-1" title="When prices were last updated">
+        <span>{status?.running ? 'Refreshing…' : <><span className="hidden sm:inline">Updated </span>{ago(status?.lastRefreshAt)}</>}</span>
+        {failed.length > 0 && <span className="text-amber-400"><span className="hidden sm:inline">· {failed.length} source{failed.length > 1 ? 's' : ''} failed</span><span className="sm:hidden">⚠ {failed.length} failed</span></span>}
       </button>
       <button
         disabled={status?.running}

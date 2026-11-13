@@ -1,4 +1,4 @@
-import { regionAt, type Deal, type Product, type RefreshStatus, type Store } from '@gib/shared';
+import { weedRegionAt, type Deal, type Product, type RefreshStatus, type Store } from '@gib/shared';
 import { mergeResults } from './normalize.ts';
 import { repairPackWeight } from './sanitize.ts';
 
@@ -12,12 +12,13 @@ export const okAt = (st: RefreshStatus | undefined, source: string, region: stri
 /** Per source and per city (San Diego / New York), keep whichever snapshot got it most recently. */
 export function mergeWeed(snaps: WeedSnapshot[]): WeedSnapshot | null {
   if (!snaps.length) return null;
-  const regionOfStore = (s: Store) => regionAt(s).id;
+  // Shops outside every city's weed list (e.g. New Jersey next to New York) are dropped here too, so old data can't bring them back.
+  const regionOfStore = (s: Store) => weedRegionAt(s) ?? 'none';
   const keys = new Set<string>();
   for (const sn of snaps) {
     for (const x of sn.status.sources) keys.add(`${x.source}|${x.region ?? 'us'}`);
     const storeRegion = new Map(sn.stores.map((s) => [s.id, regionOfStore(s)]));
-    for (const p of sn.products) keys.add(`${p.source}|${storeRegion.get(p.storeId) ?? 'us'}`);
+    for (const p of sn.products) { const r = storeRegion.get(p.storeId) ?? 'us'; if (r !== 'none') keys.add(`${p.source}|${r}`); }
   }
   const products: Product[] = [], deals: Deal[] = [], statuses: RefreshStatus['sources'] = [];
   const storeById = new Map<string, Store>();

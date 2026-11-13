@@ -1,4 +1,4 @@
-import { REGIONS, regionAt, regionOf, type RefreshStatus, type SourceStatus, type Store } from '@gib/shared';
+import { REGIONS, regionOf, weedRegionAt,type RefreshStatus, type SourceStatus, type Store } from '@gib/shared';
 import { repo, DEFAULT_PROFILE } from './db.ts';
 import { config } from './config.ts';
 import { mergeResults } from './normalize.ts';
@@ -27,7 +27,7 @@ export function weedArea(region: WeedRegion): SearchArea {
   return { lat: c.lat, lng: c.lng, radiusMiles: c.miles, zip: DEFAULT_ZIP[region], state: STATE[region] };
 }
 
-const inRegion = (region: WeedRegion) => (s: Pick<Store, 'lat' | 'lng'>) => regionAt(s).id === region;
+const inRegion = (region: WeedRegion) => (s: Pick<Store, 'lat' | 'lng'>) => weedRegionAt(s) === region;
 
 function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
   return new Promise((res, rej) => {
