@@ -36,7 +36,8 @@ function sourceBadge(p: BeerPrice): ReactNode {
   if (p.source === 'team') return <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-500/20 text-green-300">✔ Verified</span>;
   if (p.source === 'user') return <span className="text-[10px] px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-300">Reported {ago(p.reportedAt)}</span>;
   if (p.source === 'website') return <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-700 text-zinc-300">From their website</span>;
-  if (p.sourceUrl) return <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-700 text-zinc-300">From their menu · {new Date(p.reportedAt).toLocaleDateString([], { month: 'short', day: 'numeric' })}</span>;
+  // An old menu says how old it is ("dated May 2024"); otherwise, when we checked it.
+  if (p.sourceUrl) return <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-700 text-zinc-300">From their menu · {p.menuDate ? `dated ${new Date(`${p.menuDate.slice(0, 7)}-15T12:00:00Z`).toLocaleDateString([], { month: 'short', year: 'numeric' })}` : new Date(p.reportedAt).toLocaleDateString([], { month: 'short', day: 'numeric' })}</span>;
   return <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-700 text-zinc-300">Added by us</span>;
 }
 const sizeLabel = (p: Pick<BeerPrice, 'size'>) => (p.size ? ` · ${p.size}` : '');
@@ -90,6 +91,7 @@ export default function BeerPage({ profile, top }: { profile: UserProfile; top: 
     const sources = s.sources.filter((x) => BEER_STATUS_SOURCES[region.id].includes(x.source));
     return { ...s, sources, lastRefreshAt: sources.map((x) => x.finishedAt).sort().pop() ?? s.lastRefreshAt };
   }, [region.id]);
+  const refreshFn = useCallback(() => api.beer.refresh(region.id), [region.id]);
   const [view, setView] = useState<PlaceView>(() => (pref.get('gib.beer.view') as PlaceView) || 'list');
   const [list, setList] = useState<RankedVenue[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -158,7 +160,7 @@ export default function BeerPage({ profile, top }: { profile: UserProfile; top: 
       <header className={`sticky top-0 z-20 ${ACCENT.beer.header} backdrop-blur border-b border-zinc-800 pt-[env(safe-area-inset-top)]`}>
         <div className="px-4 pt-3 pb-2 flex items-center justify-between gap-3">
           {top}
-          <RefreshBar onRefreshed={load} statusFn={statusFn} refreshFn={api.beer.refresh} accent="beer" />
+          <RefreshBar onRefreshed={load} statusFn={statusFn} refreshFn={refreshFn} accent="beer" />
         </div>
         <Chips accent="beer" items={KINDS} value={kind} onChange={setKind} />
         <div className="flex flex-wrap items-center gap-2 px-4 pb-3 text-sm">

@@ -81,7 +81,11 @@ export function parsePrices(text: string, happyHour: boolean): FoundPrice[] {
     if (price < 1.5 || price > 15) return;
     const lead = text.slice(Math.max(0, at - 24), at);
     // "+$2 ..." is an add-on, "2 Tacos + Mexican Lager $14" is a combo: neither is the price of a beer.
-    if (/\+\s*$/.test(lead) || /\+\s*(?:[a-z]+ ){0,2}$/i.test(lead)) return;
+    // ("BEER + SELTZER + NON-ALCOHOLIC Coors Light $8" is a heading, not an add-on: all-caps words are fine.)
+    const plus = /\+\s*((?:[\p{L}-]+ ){0,2})$/u.exec(lead);
+    if (plus && !(plus[1].trim() && plus[1] === plus[1].toUpperCase())) return;
+    // "Nachos & a Beer $14", "Pizza and a Pint $17": a food combo, not the price of a beer.
+    if (/(?:&|\band\b|\bw\/|\bwith\b)\s*(?:an?\s+)?$/i.test(lead) || /(?:&|\band\b|\bwith\b)\s*(?:an?\s+)?$/i.test(text.slice(Math.max(0, at - 10), at))) return;
     // "$6 until 6pm": a timed special we can't place, so don't show it as the everyday price.
     if (!happyHour && end >= 0 && /^\s*(?:until|till?|before)\s+\d/i.test(text.slice(end, end + 16))) return;
     const clean = item.trim().replace(/\s+/g, ' ');
@@ -144,7 +148,7 @@ const EU_BEER = String.raw`(?:drafts?|draughts?|pints?|beers?|lagers?|pils(?:ner
   + String.raw`kozel|pilsner urquell|stella(?: artois)?|corona|erdinger|paulaner|guinness|fischer|krombacher|leffe|hoegaarden|carlsberg|tuborg|peroni|estrella|kirin|`
   + String.raw`noctua|marea|siris|chios|corfu|koryfo|κορυφ[ωώ]|craft)`;
 // Not beer, or not one beer, near the price.
-const EU_NOT_BEER = /(wine|κρασ[ιί]|cocktails?|κοκτ[εέ]ιλ|spirits?|ποτ[οό]\b|σφην|shot|coffee|καφ[εέ]|freddo|espresso|cappuccino|tea\b|τσ[αά]ι|juice|χυμ[οό]ς|soda|αναψυκτικ|water|νερ[οό]|food|burger|pizza|π[ιί]τσα|σαλ[αά]τα|salad|souvlaki|σουβλ|fries|πατ[αά]τες|pitcher|καν[αά]τα|bucket|κουβ[αά]|tower|πύργος|ginger beer|root beer|tonic|τζιν|gin\b|vodka|β[οό]ντκα|rum|ρούμι|whisk|ουίσκι|tequila|mezcal|aperol|spritz|mojito|margarita|sangria)/iu;
+const EU_NOT_BEER = /(wine|κρασ[ιί]|κτ[ηή]μα|ktima|estate|domaine|οιν[οό]|ασ[υύ]ρτικο|assyrtiko|μαλαγουζι|malagouzia|ξιν[οό]μαυρο|xinomavro|αγιωργ[ιί]τικο|agiorgitiko|μοσχοφ[ιί]λερο|moschofilero|ροδ[ιί]της|roditis|σαββατιαν|savatiano|βηλαν|vidiano|λημν|muscat|μοσχ[αά]το|sauvignon|chardonnay|merlot|cabernet|syrah|pinot|riesling|ros[eé]\b|ροζ[εέ]|prosecco|champagne|σαμπ[αά]νια|cocktails?|κοκτ[εέ]ιλ|spirits?|ποτ[οό]\b|σφην|shot|coffee|καφ[εέ]|freddo|espresso|cappuccino|tea\b|τσ[αά]ι|juice|χυμ[οό]ς|soda|αναψυκτικ|water|νερ[οό]|food|burger|pizza|π[ιί]τσα|σαλ[αά]τα|salad|souvlaki|σουβλ|fries|πατ[αά]τες|pitcher|καν[αά]τα|bucket|κουβ[αά]|tower|πύργος|ginger beer|root beer|tonic|τζιν|gin\b|vodka|β[οό]ντκα|rum|ρούμι|whisk|ουίσκι|tequila|mezcal|aperol|spritz|mojito|margarita|sangria)/iu;
 const NUM = String.raw`(\d{1,2}(?:[.,]\d{1,2})?)`;
 const EURO_AFTER = String.raw`${NUM}\s?(?:€|eur(?:o|os|ώ)?\b|ευρ[ωώ])`;   // 4,50€ / 5 EUR / 5 ευρώ
 const EURO_BEFORE = String.raw`€\s?${NUM}`;                                  // €5
@@ -178,11 +182,14 @@ export function parseEuroPrices(text: string, happyHour: boolean): FoundPrice[] 
     if (EU_NOT_BEER.test(item) || EU_NOT_BEER.test(text.slice(at, at + len))) return;
     if (/\d\s?(?:€|eur)\s?\/\s?\d|\d\s?\/\s?\d+\s?(?:€|eur)/i.test(ctx)) return;    // "4€ / 5€": which size is which? skip
     if (/\b(off|έκπτωση|discount|\+)\s*$/i.test(text.slice(Math.max(0, at - 12), at))) return;
-    const clean = item.trim().replace(/\s+/g, ' ').replace(/[\s:\-–|·]+$/, '');
+    // An item name never spans sentences ("…aromas and flavors. Ale 330ml €7.50" -> "Ale").
+    const clean = (item.trim().replace(/\s+/g, ' ').split(/[.;!?]\s+/).pop() ?? '').replace(/[\s:\-–|·]+$/, '');
     // Under a spirits/wine/cocktail heading ("whiskey ... Jameson IPA Edition 10€"), it isn't beer.
     const before = text.slice(Math.max(0, at - 160), at);
     const lastSpirit = before.search(/(whisk(?:e)?y|ουίσκι|gin|τζιν|vodka|β[οό]ντκα|rum|ρούμι|tequila|mezcal|wines?|κρασ|cocktails?|κοκτ[εέ]ιλ|spirits)(?![\p{L}])(?![\s\S]*(?:beers?|μπ[υύ]ρ|draft|βαρ[εέ]λ))/iu);
     if (lastSpirit >= 0) return;
+    // One style word alone ("Ale", "IPA") on a menu is usually a description's word next to someone else's price.
+    if (!happyHour && /^(?:ales?|ipas?|lagers?|stouts?|porters?|pils(?:ner)?|weiss|wheat|sours?|μπ[υύ]ρα)$/iu.test(clean.replace(/\s*\d{2,4}\s?ml$/i, ''))) return;
     // "440ml Can" alone names no beer.
     if (/^(?:\d{2,4}\s?ml\s*)?(?:cans?|bottles?|κουτ[αά]κι|φι[αά]λη)$/iu.test(clean)) return;
     if (!clean || /^(cans?|bottles?|beers?|μπ[υύ]ρ(?:α|ες))$/iu.test(clean) && !happyHour) return; // bare "Beer 5€" on a menu says too little

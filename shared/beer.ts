@@ -35,6 +35,7 @@ export interface BeerPrice {
   source: BeerPriceSource;
   sourceUrl?: string;
   snippet?: string;         // the text we found, shown as fine print
+  menuDate?: string;        // when the menu itself is dated ("2024-05"), so people can judge how fresh it is
   reportedAt: string;       // ISO
 }
 

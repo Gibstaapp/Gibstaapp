@@ -123,7 +123,8 @@ export const staticApi = {
       const s = await beer();
       return { ...s.status, running: false, venues: s.venues.length, areas: 1 + areas.length };
     },
-    refresh: async (): Promise<RefreshStatus> => ({ ...(await beer()).status, running: false, throttled: true, nextAllowedAt: nextMorning() }),
+    // The website refreshes on GitHub (each city every morning, or by hand from the Actions tab), not from the phone.
+    refresh: async (_region?: 'us' | 'europe'): Promise<RefreshStatus> => ({ ...(await beer()).status, running: false, throttled: true, nextAllowedAt: nextMorning() }),
     /** No server here: reports are kept on this phone. */
     report: async (r: BeerReport): Promise<BeerPrice> => {
       const price = Number(r.price);

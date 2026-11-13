@@ -54,6 +54,7 @@ export function loadSeed(venues: BeerVenue[], file = SEED_FILE): { venues: BeerV
     prices.push({
       id: `seed:${i}:${venue.id}`, venueId: venue.id, item: p.item, price: p.price, size: p.size, kind: p.kind ?? 'regular',
       ...(p.currency === 'EUR' ? { currency: 'EUR' as const } : {}),
+      ...(typeof p.menuDate === 'string' ? { menuDate: p.menuDate } : {}),
       days: p.days, start: p.start, end: p.end,
       source: p.source === 'team' ? 'team' : 'seed', snippet: p.note, sourceUrl: p.url,
       // A bare date ("2026-11-13") means that day anywhere: noon UTC, so no time zone shows it as the day before.

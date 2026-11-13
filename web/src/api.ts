@@ -127,7 +127,8 @@ const serverApi = {
   beer: {
     venues: (q: BeerQuery) => call<{ venues: RankedVenue[]; loading: string | null }>('/api/beer/venues', { method: 'POST', body: JSON.stringify({ ...q, tzOffset: new Date().getTimezoneOffset() }) }),
     status: () => call<RefreshStatus & { venues: number; areas: number }>('/api/beer/status'),
-    refresh: () => call<RefreshStatus>('/api/beer/refresh', { method: 'POST' }),
+    /** Refresh one city's beer data (San Diego 'us' / Athens 'europe'); none = both. */
+    refresh: (region?: 'us' | 'europe') => call<RefreshStatus>('/api/beer/refresh', { method: 'POST', body: JSON.stringify(region ? { region } : {}) }),
     report: (r: BeerReport) => call<BeerPrice>('/api/beer/report', { method: 'POST', body: JSON.stringify(r) }),
     removeReport: (id: string) => call<{ ok: boolean }>(`/api/beer/report/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   },
