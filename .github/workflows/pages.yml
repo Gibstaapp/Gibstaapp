@@ -48,10 +48,17 @@ jobs:
 
       # Site address comes from the repo, so renaming the account/repo or moving it to an organization keeps working.
       - name: Work out site address
+        # A repo named <owner>.github.io is served at the root (https://<owner>.github.io/), others at /<repo>/.
         run: |
-          echo "SITE_URL=https://${GITHUB_REPOSITORY_OWNER,,}.github.io/${GITHUB_REPOSITORY#*/}" >> "$GITHUB_ENV"
+          OWNER="${GITHUB_REPOSITORY_OWNER,,}"; NAME="${GITHUB_REPOSITORY#*/}"
+          if [ "${NAME,,}" = "$OWNER.github.io" ]; then
+            echo "SITE_URL=https://$OWNER.github.io" >> "$GITHUB_ENV"
+            echo "VITE_BASE=/" >> "$GITHUB_ENV"
+          else
+            echo "SITE_URL=https://$OWNER.github.io/$NAME" >> "$GITHUB_ENV"
+            echo "VITE_BASE=/$NAME/" >> "$GITHUB_ENV"
+          fi
           echo "PC_DATA_URL=https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/data" >> "$GITHUB_ENV"
-          echo "VITE_BASE=/${GITHUB_REPOSITORY#*/}/" >> "$GITHUB_ENV"
 
       - name: Build website (static mode)
         run: npm run build -w web
