@@ -7,12 +7,16 @@
 # - On every push to main: publish the new code right away, reusing the latest data
 #   (so code changes go live in ~2 minutes without waiting for a full price refresh).
 # - "Run workflow" button (Actions tab): choose whether to refresh prices too.
+# - Athens has its own daily beer refresh (euros) at 05:00 UTC = 7-8 AM in Athens; San Diego's (dollars) is in the
+#   13:00 UTC run. Each keeps the other city's data as it is.
+# - On every push to main the tests run first; a failing test stops the deploy.
 # - A source that fails keeps its last good data.
 name: Website
 
 on:
   schedule:
     - cron: '0 13 * * *'   # 13:00 UTC = 5-6 AM in San Diego: full price refresh
+    - cron: '0 5 * * *'    # 05:00 UTC = 7-8 AM in Athens: Athens beer refresh (euros) only
     - cron: '20 * * * *'   # hourly: quick merge of the PC's latest data (no scraping)
   push:
     branches: [main]
@@ -60,6 +64,10 @@ jobs:
           fi
           echo "PC_DATA_URL=https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/data" >> "$GITHUB_ENV"
 
+      - name: Run tests
+        if: github.event_name == 'push'
+        run: npm test
+
       - name: Build website (static mode)
         run: npm run build -w web
         env:
@@ -68,7 +76,9 @@ jobs:
       - name: Decide whether to refresh prices
         id: mode
         run: |
-          if [ "${{ github.event.schedule }}" = "0 13 * * *" ] || [ "${{ github.event.inputs.refresh }}" = "true" ]; then
+          if [ "${{ github.event.schedule }}" = "0 5 * * *" ]; then
+            echo "refresh=athens" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event.schedule }}" = "0 13 * * *" ] || [ "${{ github.event.inputs.refresh }}" = "true" ]; then
             echo "refresh=true" >> "$GITHUB_OUTPUT"
           elif curl -sf "$SITE_URL/data/weed.json" -o /dev/null || curl -sf "$PC_DATA_URL/weed.json" -o /dev/null; then
             echo "refresh=false" >> "$GITHUB_OUTPUT"
@@ -82,6 +92,16 @@ jobs:
         run: npx tsx src/export-static.ts ../web/dist/data
         env:
           SKIP_REFRESH: '1'
+          GIB_DB: ${{ runner.temp }}/snapshot.db
+          PREV_URL: ${{ env.SITE_URL }}
+          PC_DATA_URL: ${{ env.PC_DATA_URL }}
+
+      - name: Refresh Athens beer (euros) and export data
+        if: steps.mode.outputs.refresh == 'athens'
+        working-directory: server
+        run: npx tsx src/export-static.ts ../web/dist/data
+        env:
+          REFRESH: athens
           GIB_DB: ${{ runner.temp }}/snapshot.db
           PREV_URL: ${{ env.SITE_URL }}
           PC_DATA_URL: ${{ env.PC_DATA_URL }}
