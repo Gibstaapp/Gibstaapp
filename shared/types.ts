@@ -192,7 +192,9 @@ export interface PricedItem {
 }
 
 export interface SourceStatus {
-  source: SourceId | 'osm' | 'bar-websites' | 'athens-places' | 'athens-menus';
+  source: SourceId | 'osm' | 'bar-websites' | 'athens-places' | 'athens-menus' | 'nyc-places' | 'nyc-bar-websites';
+  /** Which city's refresh this line belongs to (weed sources run once per city). Missing = San Diego. */
+  region?: 'us' | 'nyc' | 'europe';
   ok: boolean;
   stores: number;
   products: number;
@@ -211,3 +213,4 @@ export * from './beer.ts';
 export * from './badges.ts';
 export * from './areas.ts';
 export * from './athens-postcodes.ts';
+export * from './nyc-zips.ts';

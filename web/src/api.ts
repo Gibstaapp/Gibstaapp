@@ -121,14 +121,15 @@ const serverApi = {
   publicUrl: () => call<{ url: string | null }>('/api/public-url'),
   zips: () => call<Record<string, HomeArea>>('/api/zips'),
   status: () => call<RefreshStatus>('/api/status'),
-  refresh: () => call<RefreshStatus>('/api/refresh', { method: 'POST' }),
+  /** Refresh one city's weed data (San Diego 'us' / New York 'nyc'); none = both. */
+  refresh: (region?: 'us' | 'nyc' | 'europe') => call<RefreshStatus>('/api/refresh', { method: 'POST', body: JSON.stringify(region && region !== 'europe' ? { region } : {}) }),
   testNotify: () => call<{ sent: boolean; body: string; reason?: string }>('/api/notify/test', { method: 'POST' }),
 
   beer: {
     venues: (q: BeerQuery) => call<{ venues: RankedVenue[]; loading: string | null }>('/api/beer/venues', { method: 'POST', body: JSON.stringify({ ...q, tzOffset: new Date().getTimezoneOffset() }) }),
     status: () => call<RefreshStatus & { venues: number; areas: number }>('/api/beer/status'),
-    /** Refresh one city's beer data (San Diego 'us' / Athens 'europe'); none = both. */
-    refresh: (region?: 'us' | 'europe') => call<RefreshStatus>('/api/beer/refresh', { method: 'POST', body: JSON.stringify(region ? { region } : {}) }),
+    /** Refresh one city's beer data (San Diego 'us' / New York 'nyc' / Athens 'europe'); none = all. */
+    refresh: (region?: 'us' | 'nyc' | 'europe') => call<RefreshStatus>('/api/beer/refresh', { method: 'POST', body: JSON.stringify(region ? { region } : {}) }),
     report: (r: BeerReport) => call<BeerPrice>('/api/beer/report', { method: 'POST', body: JSON.stringify(r) }),
     removeReport: (id: string) => call<{ ok: boolean }>(`/api/beer/report/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   },

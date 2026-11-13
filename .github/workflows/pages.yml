@@ -7,16 +7,19 @@
 # - On every push to main: publish the new code right away, reusing the latest data
 #   (so code changes go live in ~2 minutes without waiting for a full price refresh).
 # - "Run workflow" button (Actions tab): choose whether to refresh prices too.
-# - Athens has its own daily beer refresh (euros) at 05:00 UTC = 7-8 AM in Athens; San Diego's (dollars) is in the
-#   13:00 UTC run. Each keeps the other city's data as it is.
+# - Each city has its own daily refresh, and each keeps the other cities' data as it is:
+#     Athens (beer, euros)            05:00 UTC = 7-8 AM in Athens
+#     New York (weed + beer, dollars) 12:00 UTC = 7-8 AM in New York
+#     San Diego (weed + beer, dollars) 13:00 UTC = 5-6 AM in San Diego
 # - On every push to main the tests run first; a failing test stops the deploy.
 # - A source that fails keeps its last good data.
 name: Website
 
 on:
   schedule:
-    - cron: '0 13 * * *'   # 13:00 UTC = 5-6 AM in San Diego: full price refresh
-    - cron: '0 5 * * *'    # 05:00 UTC = 7-8 AM in Athens: Athens beer refresh (euros) only
+    - cron: '0 13 * * *'   # 13:00 UTC = 5-6 AM in San Diego: San Diego refresh (weed + beer)
+    - cron: '0 12 * * *'   # 12:00 UTC = 7-8 AM in New York: New York refresh (weed + beer)
+    - cron: '0 5 * * *'    # 05:00 UTC = 7-8 AM in Athens: Athens beer refresh (euros)
     - cron: '20 * * * *'   # hourly: quick merge of the PC's latest data (no scraping)
   push:
     branches: [main]
@@ -29,8 +32,8 @@ on:
       city:
         description: 'Which city to refresh (each has its own refresh)'
         type: choice
-        options: [both, san-diego, athens]
-        default: both
+        options: [all, san-diego, new-york, athens]
+        default: all
 
 permissions:
   contents: read
@@ -83,9 +86,11 @@ jobs:
         run: |
           if [ "${{ github.event.schedule }}" = "0 5 * * *" ] || { [ "${{ github.event.inputs.refresh }}" = "true" ] && [ "${{ github.event.inputs.city }}" = "athens" ]; }; then
             echo "refresh=athens" >> "$GITHUB_OUTPUT"
-          elif [ "${{ github.event.inputs.refresh }}" = "true" ] && [ "${{ github.event.inputs.city }}" = "san-diego" ]; then
+          elif [ "${{ github.event.schedule }}" = "0 12 * * *" ] || { [ "${{ github.event.inputs.refresh }}" = "true" ] && [ "${{ github.event.inputs.city }}" = "new-york" ]; }; then
+            echo "refresh=newyork" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event.schedule }}" = "0 13 * * *" ] || { [ "${{ github.event.inputs.refresh }}" = "true" ] && [ "${{ github.event.inputs.city }}" = "san-diego" ]; }; then
             echo "refresh=sandiego" >> "$GITHUB_OUTPUT"
-          elif [ "${{ github.event.schedule }}" = "0 13 * * *" ] || [ "${{ github.event.inputs.refresh }}" = "true" ]; then
+          elif [ "${{ github.event.inputs.refresh }}" = "true" ]; then
             echo "refresh=true" >> "$GITHUB_OUTPUT"
           elif curl -sf "$SITE_URL/data/weed.json" -o /dev/null || curl -sf "$PC_DATA_URL/weed.json" -o /dev/null; then
             echo "refresh=false" >> "$GITHUB_OUTPUT"
@@ -114,18 +119,18 @@ jobs:
           PC_DATA_URL: ${{ env.PC_DATA_URL }}
 
       - name: Install browser for scraping
-        if: steps.mode.outputs.refresh == 'true' || steps.mode.outputs.refresh == 'sandiego'
+        if: steps.mode.outputs.refresh == 'true' || steps.mode.outputs.refresh == 'sandiego' || steps.mode.outputs.refresh == 'newyork'
         run: npx playwright install --with-deps chromium
 
       - name: Refresh prices and export data
-        if: steps.mode.outputs.refresh == 'true' || steps.mode.outputs.refresh == 'sandiego'
+        if: steps.mode.outputs.refresh == 'true' || steps.mode.outputs.refresh == 'sandiego' || steps.mode.outputs.refresh == 'newyork'
         working-directory: server
         run: |
           mkdir -p data
           echo '{ "sources": { "sample": false, "dutchie": true, "jane": true, "weedmaps": true, "eaze": true }, "tunnel": false, "sourceTimeoutMs": 900000 }' > data/config.json
           npx tsx src/export-static.ts ../web/dist/data
         env:
-          REFRESH: ${{ steps.mode.outputs.refresh == 'sandiego' && 'sandiego' || '' }}
+          REFRESH: ${{ steps.mode.outputs.refresh != 'true' && steps.mode.outputs.refresh || '' }}
           GIB_DB: ${{ runner.temp }}/snapshot.db
           PREV_URL: ${{ env.SITE_URL }}
           PC_DATA_URL: ${{ env.PC_DATA_URL }}

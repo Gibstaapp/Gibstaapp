@@ -38,6 +38,26 @@
       "lng": 23.7253,
       "address": "Adrianou 52, Monastiraki, Athens",
       "website": "https://cafe.hardrock.com/athens/"
+    },
+    {
+      "id": "seed:loreleynyc",
+      "name": "Loreley Beer Garden",
+      "kind": "bar",
+      "lat": 40.7213,
+      "lng": -73.9928,
+      "address": "7 Rivington St, New York",
+      "website": "https://www.loreleynyc.com",
+      "openingHours": "Mo-Tu 12:00-24:00; We 12:00-01:00; Th 12:00-02:00; Fr,Sa 12:00-04:00; Su 12:00-24:00"
+    },
+    {
+      "id": "seed:thewaylandnyc",
+      "name": "The Wayland",
+      "kind": "bar",
+      "lat": 40.7251,
+      "lng": -73.9779,
+      "address": "700 E 9th St, New York",
+      "website": "https://www.thewaylandnyc.com",
+      "openingHours": "Mo-We 16:00-02:00; Th 16:00-03:00; Fr 16:00-04:00; Sa 14:00-04:00; Su 14:00-02:00"
     }
   ],
   "prices": [
@@ -361,6 +381,120 @@
       "source": "seed",
       "date": "2026-11-13",
       "note": "BARRELS (draft), from their English beer menu (machine-translated), May 2024: Murphy's: 330ml €4.00 · 500ml €6.00 · 1lt €12.00 · 3lt €30.00 · 5lt €50.00"
+    },
+    {
+      "venueId": "seed:loreleynyc",
+      "name": "Loreley Beer Garden",
+      "url": "https://www.loreleynyc.com/menu",
+      "item": "1 liter stein (draft)",
+      "price": 16,
+      "kind": "happy_hour",
+      "days": [
+        1,
+        2
+      ],
+      "start": "12:00",
+      "end": "22:00",
+      "source": "seed",
+      "date": "2026-11-13",
+      "note": "Happy Hour Mondays & Tuesday til 10pm, Wednesdays & Thursdays til 7pm! Happy Hour: Draft Beer $2 off · All 1 Liter Steins 16 · Beer Pitchers 29 · Beer Cans 6 (they open at noon)",
+      "size": "1000ml"
+    },
+    {
+      "venueId": "seed:loreleynyc",
+      "name": "Loreley Beer Garden",
+      "url": "https://www.loreleynyc.com/menu",
+      "item": "1 liter stein (draft)",
+      "price": 16,
+      "kind": "happy_hour",
+      "days": [
+        3,
+        4
+      ],
+      "start": "12:00",
+      "end": "19:00",
+      "source": "seed",
+      "date": "2026-11-13",
+      "note": "Happy Hour Mondays & Tuesday til 10pm, Wednesdays & Thursdays til 7pm! Happy Hour: Draft Beer $2 off · All 1 Liter Steins 16 · Beer Pitchers 29 · Beer Cans 6 (they open at noon)",
+      "size": "1000ml"
+    },
+    {
+      "venueId": "seed:loreleynyc",
+      "name": "Loreley Beer Garden",
+      "url": "https://www.loreleynyc.com/menu",
+      "item": "Beer cans",
+      "price": 6,
+      "kind": "happy_hour",
+      "days": [
+        1,
+        2
+      ],
+      "start": "12:00",
+      "end": "22:00",
+      "source": "seed",
+      "date": "2026-11-13",
+      "note": "Happy Hour Mondays & Tuesday til 10pm, Wednesdays & Thursdays til 7pm! Happy Hour: Draft Beer $2 off · All 1 Liter Steins 16 · Beer Pitchers 29 · Beer Cans 6 (they open at noon)",
+      "size": "12oz"
+    },
+    {
+      "venueId": "seed:loreleynyc",
+      "name": "Loreley Beer Garden",
+      "url": "https://www.loreleynyc.com/menu",
+      "item": "Beer cans",
+      "price": 6,
+      "kind": "happy_hour",
+      "days": [
+        3,
+        4
+      ],
+      "start": "12:00",
+      "end": "19:00",
+      "source": "seed",
+      "date": "2026-11-13",
+      "note": "Happy Hour Mondays & Tuesday til 10pm, Wednesdays & Thursdays til 7pm! Happy Hour: Draft Beer $2 off · All 1 Liter Steins 16 · Beer Pitchers 29 · Beer Cans 6 (they open at noon)",
+      "size": "12oz"
+    },
+    {
+      "venueId": "seed:thewaylandnyc",
+      "name": "The Wayland",
+      "url": "https://www.thewaylandnyc.com/happy-hour",
+      "menuDate": "2024-10",
+      "item": "Tecate",
+      "price": 4,
+      "kind": "happy_hour",
+      "days": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "start": "16:00",
+      "end": "19:00",
+      "source": "seed",
+      "date": "2026-11-13",
+      "note": "THE WAYLAND · HAPPY HOUR UNTIL 7PM · BEER & WINE: Tecate / 4 · Founder’s IPA / 5 (happy-hour menu image, read with OCR and checked by eye; they open 4 PM weekdays)"
+    },
+    {
+      "venueId": "seed:thewaylandnyc",
+      "name": "The Wayland",
+      "url": "https://www.thewaylandnyc.com/happy-hour",
+      "menuDate": "2024-10",
+      "item": "Founder's IPA",
+      "price": 5,
+      "kind": "happy_hour",
+      "days": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "start": "16:00",
+      "end": "19:00",
+      "source": "seed",
+      "date": "2026-11-13",
+      "note": "THE WAYLAND · HAPPY HOUR UNTIL 7PM · BEER & WINE: Tecate / 4 · Founder’s IPA / 5 (happy-hour menu image, read with OCR and checked by eye; they open 4 PM weekdays)"
     }
   ],
   "happyHours": [
@@ -395,6 +529,24 @@
       "url": "https://cafe.hardrock.com/athens/",
       "date": "2026-11-13",
       "note": "Monday to Friday between 16:00 to 18:00 & 22:00 to 23:00: exclusive offers to beer, wine and cocktails. Get your second drink with 75% discount, per person."
+    },
+    {
+      "name": "169 Bar",
+      "venueId": "osm:node/6231529913",
+      "days": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "start": "14:00",
+      "end": "19:00",
+      "url": "https://www.169barnyc.com",
+      "date": "2026-11-13",
+      "note": "OPEN EVERY DAY 2PM-4AM · HAPPY HOUR 2pm to 7pm EVERYDAY (from their website)"
     }
   ]
 }

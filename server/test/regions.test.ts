@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { AREAS, ATHENS_POSTCODES, MAX_RESULT_MILES, SD_ZIPS, distanceChoices, fmtDistance, fmtNear, regionAt, regionOf, type Product, type Store } from '@gib/shared';
+import { AREAS, ATHENS_POSTCODES, MAX_RESULT_MILES, NYC_ZIPS, REGIONS, REGION_ORDER, SD_ZIPS, distanceChoices, fmtDistance, fmtNear, regionAt, regionOf, type Product, type Store } from '@gib/shared';
 import { DEFAULT_PROFILE } from '../src/db.ts';
+import { computeTax } from '../src/pricing/taxes.ts';
+import { mergeWeedStatus } from '../src/refresh.ts';
+import { mergeWeed } from '../src/merge-weed.ts';
 import { openState } from '../src/hours.ts';
 import { ouncesOf, rankVenues } from '../src/beer/rank.ts';
 import { loadSeed, mergeBeerStatus } from '../src/beer/refresh.ts';
@@ -8,10 +11,24 @@ import { dedupe } from '../src/beer/osm.ts';
 import { haversineMiles, rankItems } from '../src/pricing/engine.ts';
 
 describe('area codes', () => {
-  it('San Diego ZIPs are under the U.S. tab, Athens postcodes under Europe', () => {
+  it('San Diego, New York and Athens each under their own tab', () => {
     expect(Object.keys(SD_ZIPS).every((z) => AREAS[z].region === 'us')).toBe(true);
+    expect(Object.keys(NYC_ZIPS).every((z) => AREAS[z].region === 'nyc')).toBe(true);
     expect(Object.keys(ATHENS_POSTCODES).every((z) => AREAS[z].region === 'europe')).toBe(true);
-    expect(Object.keys(AREAS)).toHaveLength(Object.keys(SD_ZIPS).length + Object.keys(ATHENS_POSTCODES).length);
+    expect(Object.keys(AREAS)).toHaveLength(Object.keys(SD_ZIPS).length + Object.keys(NYC_ZIPS).length + Object.keys(ATHENS_POSTCODES).length);
+    expect(REGION_ORDER.map((r) => REGIONS[r].tab)).toEqual(['🌴 San Diego', '🗽 New York', '🇪🇺 Europe']);
+  });
+  it('New York ZIPs: five boroughs, real neighborhoods', () => {
+    const zips = Object.entries(NYC_ZIPS);
+    expect(zips.length).toBeGreaterThan(180);
+    expect(new Set(zips.map(([, z]) => z.city))).toEqual(new Set(['Manhattan', 'Brooklyn', 'Queens', 'Bronx', 'Staten Island']));
+    for (const [code, z] of zips) {
+      expect(code).toMatch(/^1(0[0-4]|1[0-6])\d\d$/);
+      expect(regionAt(z).id).toBe('nyc');
+    }
+    expect(NYC_ZIPS['10014']).toMatchObject({ area: 'West Village', city: 'Manhattan' });
+    expect(NYC_ZIPS['11211']).toMatchObject({ area: 'Williamsburg', city: 'Brooklyn' });
+    expect(regionOf('10003')).toMatchObject({ id: 'nyc', currency: 'USD', units: 'mi', weedLegal: true, taxState: 'NY', timeZone: 'America/New_York' });
   });
   it('Athens postcodes look right and sit in greater Athens', () => {
     const codes = Object.entries(ATHENS_POSTCODES);
@@ -155,5 +172,36 @@ describe('separate daily refreshes: San Diego ($) and Athens (€)', () => {
   });
   it('starting a refresh only marks it running', () => {
     expect(mergeBeerStatus(prev, 'us', null, true)).toMatchObject({ running: true, sources: prev.sources });
+  });
+});
+
+describe('New York', () => {
+  it('cannabis tax: 9% state + 4% local, no sales tax', () => {
+    expect(computeTax(100, 'New York', 0, false, 'NY')).toMatchObject({ excise: 9, local: 4, sales: 0, total: 13, included: false });
+    expect(computeTax(100, 'San Diego', 0, false, 'CA').total).toBeGreaterThan(30); // California is still California
+    expect(computeTax(100, 'New York', 0, true, 'NY')).toMatchObject({ total: 0, included: true });
+  });
+  it('a New York store is taxed the New York way', () => {
+    const store = { id: 'ny', name: 'NY shop', address: '1 Broadway', city: 'New York', lat: 40.73, lng: -73.99, sources: [{ source: 'jane' as const, externalId: '1' }], pickup: true, ownSitePickup: null, taxIncluded: false, delivery: [] };
+    const item = rankItems([{ id: 'p', storeId: 'ny', source: 'jane', name: 'Flower 3.5g', category: 'flower', grams: 3.5, price: 40 }], new Map([['ny', store]]), [], new Map(), { ...DEFAULT_PROFILE, lat: 40.73, lng: -73.99 }, { mode: 'pickup' })[0];
+    expect(item.tax).toMatchObject({ excise: 3.6, local: 1.6, sales: 0, total: 5.2 });
+    expect(item.otd).toBe(45.2);
+  });
+  it("one city's weed refresh never touches the other's status lines", () => {
+    const line = (source: any, region: any, finishedAt: string) => ({ source, region, ok: true, stores: 1, products: 1, finishedAt });
+    const prev = { running: false, sources: [{ source: 'jane' as const, ok: true, stores: 1, products: 1, finishedAt: '2026-11-13T13:00:00Z' }, line('jane', 'nyc', '2026-11-13T12:00:00Z')] };
+    const next = mergeWeedStatus(prev, 'nyc', [line('jane', 'nyc', '2026-11-14T12:00:00Z'), line('weedmaps', 'nyc', '2026-11-14T12:01:00Z')], false);
+    expect(next.sources.filter((s) => !s.region).map((s) => s.finishedAt)).toEqual(['2026-11-13T13:00:00Z']); // San Diego's (old, no region) kept
+    expect(next.sources.filter((s) => s.region === 'nyc')).toHaveLength(2);
+  });
+  it('website data merges per source and per city', () => {
+    const st = (id: string, lat: number, lng: number) => ({ id, name: id, address: '1 Main St', city: 'X', lat, lng, sources: [{ source: 'jane' as const, externalId: id }], pickup: true, ownSitePickup: null, taxIncluded: null, delivery: [] });
+    const p = (storeId: string) => ({ id: storeId + ':p', storeId, source: 'jane' as const, name: 'Flower 3.5g', category: 'flower' as const, grams: 3.5, price: 30 });
+    // Yesterday's snapshot has San Diego; today's New York-only run has New York. Both survive.
+    const sd = { stores: [st('sd', 32.85, -117.2)], products: [p('sd')], deals: [], status: { running: false, sources: [{ source: 'jane' as const, ok: true, stores: 1, products: 1, finishedAt: '2026-11-13T13:00:00Z' }] } };
+    const ny = { stores: [st('ny', 40.73, -73.99)], products: [p('ny')], deals: [], status: { running: false, sources: [{ source: 'jane' as const, region: 'nyc' as const, ok: true, stores: 1, products: 1, finishedAt: '2026-11-14T12:00:00Z' }] } };
+    const m = mergeWeed([sd, ny])!;
+    expect(m.stores.map((s) => s.id).sort()).toEqual(['ny', 'sd']);
+    expect(m.products).toHaveLength(2);
   });
 });

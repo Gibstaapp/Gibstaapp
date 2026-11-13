@@ -1,4 +1,4 @@
-import { MAX_RESULT_MILES } from '@gib/shared';
+import { MAX_RESULT_MILES, regionAt } from '@gib/shared';
 import type { Category, Deal, DeliveryOption, Mode, OpenStatus, PricedItem, Product, Store, StoreOverride, UserProfile } from '@gib/shared';
 import { bestDeal, finePrintFor } from './deals.ts';
 import { computeTax } from './taxes.ts';
@@ -62,7 +62,7 @@ export function priceItem(product: Product, rawStore: Store, deals: Deal[], prof
   const calc = (includeFirstTime: boolean) => {
     const { applied, used } = bestDeal(product, deals, profile, ctx, includeFirstTime);
     const priceAfterDeals = applied?.effectiveUnitPrice ?? product.price;
-    const tax = computeTax(priceAfterDeals, store.city, deliveryFee, store.taxIncluded);
+    const tax = computeTax(priceAfterDeals, store.city, deliveryFee, store.taxIncluded, regionAt(store).taxState);
     const otd = round2(priceAfterDeals + deliveryFee + tax.total);
     return { applied, used, priceAfterDeals, tax, otd };
   };

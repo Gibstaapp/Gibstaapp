@@ -35,7 +35,7 @@ describe('PDF menus', () => {
   });
   it('dollar menus too (San Diego)', async () => {
     const t = await pdfToText(makePdf([[60, 700, 'Draft Beers'], [60, 680, 'Coors Light - $5.00'], [60, 660, 'House IPA - $7.00']]), null);
-    expect(parsePrices(t!.text, false).map((p) => `${p.item}|${p.price}`)).toEqual(['Coors Light|5', 'IPA|7']);
+    expect(parsePrices(t!.text, false).map((p) => `${p.item}|${p.price}`)).toEqual(['Coors Light|5', 'House IPA|7']);
   });
   it('picks menu PDFs on the same site, never grant posters', () => {
     const html = `<a href="/wp-content/uploads/2024/05/BEER-MENU-english.pdf">Beer menu</a>

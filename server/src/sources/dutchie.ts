@@ -707,7 +707,7 @@ async function run(page: Page, area: SearchArea, log: (msg: string) => void): Pr
 
   const dfilter = {
     nearLat: area.lat, nearLng: area.lng, distance: area.radiusMiles, sortBy: gqlEnum('distance'), activeOnly: true,
-    destinationTaxState: 'CA', medical: false, recreational: false,
+    destinationTaxState: area.state, medical: false, recreational: false,
   };
   const data = await gql('/graphql', `{ filteredDispensaries(filter: ${gqlLiteral(dfilter)}) { ${DISPENSARY_FIELDS} } }`);
   const raws: RawDispensary[] = data?.filteredDispensaries ?? [];

@@ -37,6 +37,13 @@ describe('beer prices: things that are not a beer price', () => {
     expect(items('all $9.00 PBR 24oz Tall Can $9.00 Seltzers')).toEqual([]);
     expect(items('DAILY Drink & Food SPECIALS Bottled Beer Mondays $5 Select bottled beers Taco Tuesdays', true)).toEqual(['Select bottled beers $5']);
   });
+  it('keeps brand names and drops lone generic items (real NYC menu snippets)', () => {
+    expect(items('$ 11 Fiddlehead IPA $ 11')).toEqual(['Fiddlehead IPA $11']);
+    expect(items('Draft Beer Threes Vliet Pilsner $ 8')).toEqual(['Threes Vliet Pilsner $8']);
+    expect(items('and enjoy our IPA $8 tonight')).toEqual([]);
+    expect(items('/ $ 14 / $ 56 BEER $ 8.32 / $ 8 Corona, Mexico')).toEqual([]);
+    expect(items('Bottles Pacifico $ 8')).toEqual(['Pacifico $8']);
+  });
   it('still finds the real ones', () => {
     expect(items('Bud Light $6.00 Budweiser $6.00 Coors Light $6.00 Stella $7.00')).toEqual(['Bud Light $6', 'Coors Light $6', 'Stella $7']);
     expect(items('HAPPY HOUR · $5 Wells · $5 Select Drafts · $2 Off Cocktails', true)).toEqual(['Select Drafts $5']);

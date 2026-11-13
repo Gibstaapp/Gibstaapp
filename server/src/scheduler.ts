@@ -8,10 +8,11 @@ import { publishData } from './publish.ts';
 
 let task: ScheduledTask | null = null;
 let athensTask: ScheduledTask | null = null;
+let nycTask: ScheduledTask | null = null;
 
 export async function morningJob() {
   console.log('[scheduler] morning refresh starting');
-  await Promise.all([refreshAll(), refreshBeer({ region: 'us' }).catch((e) => console.error('[scheduler] beer', e))]);
+  await Promise.all([refreshAll({ region: 'us' }), refreshBeer({ region: 'us' }).catch((e) => console.error('[scheduler] beer', e))]);
   if (config.publishData) console.log('[scheduler]', publishData().message);
   const r = await sendMorningDigest();
   console.log(`[scheduler] digest ${r.sent ? 'sent' : `not sent (${r.reason})`}`);
@@ -31,4 +32,13 @@ export function startScheduler() {
       .catch((e) => console.error('[scheduler athens]', e));
   }, { timezone: BEER_REFRESH_TIME_ZONE.europe });
   console.log('[scheduler] Athens beer refresh at 7:00 Athens time');
+  // New York has its own daily refresh (weed + beer, dollars), at 7 AM New York time.
+  nycTask?.stop();
+  nycTask = cron.schedule('0 7 * * *', () => {
+    Promise.all([
+      refreshAll({ region: 'nyc' }).catch((e) => console.error('[scheduler nyc] weed', e)),
+      refreshBeer({ region: 'nyc' }).catch((e) => console.error('[scheduler nyc] beer', e)),
+    ]).then(() => { if (config.publishData) console.log('[scheduler nyc]', publishData().message); });
+  }, { timezone: BEER_REFRESH_TIME_ZONE.nyc });
+  console.log('[scheduler] New York refresh at 7:00 New York time');
 }

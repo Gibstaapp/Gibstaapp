@@ -13,9 +13,11 @@ One app, two modes, picked with the switch at the top:
 
 Both modes have a **🧭 Compass** that points at the place you picked, plus list and map views.
 
-**Where it works.** Settings → Area code has two tabs:
+**Where it works.** Settings → Area code has three tabs:
 
-- **🇺🇸 U.S.:** San Diego County ZIPs. Weed + beer, dollars, miles.
+- **🌴 San Diego:** San Diego County ZIPs. Weed + beer, dollars, miles.
+- **🗽 New York:** 211 NYC ZIPs, grouped by borough. Weed + beer, dollars, miles, New York's cannabis tax
+  (9% state + 4% local, no sales tax). Its own daily refresh at 7 AM New York time.
 - **🇪🇺 Europe:** 259 greater-Athens postcodes (e.g. 105 58 · Plaka), grouped by municipality. Beer only: recreational
   cannabis isn't legal in Greece, so the Weed switch is greyed out and explains why. Euros, kilometres, Athens time and
   Greek public holidays. Athens bars are in the daily data. Athens has its own daily refresh (euros, 7 AM Athens time), separate from San Diego's

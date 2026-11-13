@@ -1,13 +1,13 @@
 // Dev tool: run one adapter by itself and print a summary + samples.
-//   npx tsx src/sources/try-source.ts weedmaps
-import { DEFAULT_PROFILE } from '../db.ts';
+//   npx tsx src/sources/try-source.ts weedmaps [nyc]
+import { weedArea } from '../refresh.ts';
 import type { SourceAdapter } from './types.ts';
 
 const name = process.argv[2];
-if (!name) { console.error('usage: try-source.ts <dutchie|jane|weedmaps|eaze|sample>'); process.exit(1); }
+if (!name) { console.error('usage: try-source.ts <dutchie|jane|weedmaps|eaze|sample> [us|nyc]'); process.exit(1); }
 const mod = await import(`./${name}.ts`);
 const adapter: SourceAdapter = mod[`${name}Adapter`];
-const area = { lat: DEFAULT_PROFILE.lat, lng: DEFAULT_PROFILE.lng, radiusMiles: DEFAULT_PROFILE.radiusMiles, zip: DEFAULT_PROFILE.homeZip };
+const area = weedArea(process.argv[3] === 'nyc' ? 'nyc' : 'us');
 const t0 = Date.now();
 const r = await adapter.fetchAll(area, (m) => console.log(`[${name}] ${m}`));
 console.log(`\n${r.stores.length} stores, ${r.products.length} products, ${r.deals.length} deals in ${Math.round((Date.now() - t0) / 1000)}s`);

@@ -88,7 +88,23 @@ export function parsePrices(text: string, happyHour: boolean): FoundPrice[] {
     if (/(?:&|\band\b|\bw\/|\bwith\b)\s*(?:an?\s+)?$/i.test(lead) || /(?:&|\band\b|\bwith\b)\s*(?:an?\s+)?$/i.test(text.slice(Math.max(0, at - 10), at))) return;
     // "$6 until 6pm": a timed special we can't place, so don't show it as the everyday price.
     if (!happyHour && end >= 0 && /^\s*(?:until|till?|before)\s+\d/i.test(text.slice(end, end + 16))) return;
-    const clean = item.trim().replace(/\s+/g, ' ');
+    let clean = item.trim().replace(/\s+/g, ' ');
+    // Brand words just before the beer word belong to its name: "Fiddlehead IPA $11", "Threes Vliet Pilsner $8".
+    // Only Capitalized words (not "and enjoy our IPA"), and never menu headings ("Draft Beer", "Bottles").
+    if (end >= 0) {
+      const words = text.slice(Math.max(0, at - 40), at).trimEnd().split(/\s+/);
+      const brand: string[] = [];
+      while (brand.length < 2 && words.length) {
+        const w = words.pop()!;
+        if (!/^[A-Z][\w'’.&-]*$/.test(w) || /^(beers?|drafts?|draughts?|bottles?|cans?|on|tap|menu|happy|hour|wines?|cocktails?|and|the|our|all|select|BEERS?|DRAFTS?)$/i.test(w)) break;
+        brand.unshift(w);
+      }
+      if (brand.length) clean = `${brand.join(' ')} ${clean}`;
+    }
+    // A plural menu heading in front of the beer isn't part of its name: "Bottles Pacifico $8" -> "Pacifico".
+    clean = clean.replace(/^(?:bottles|cans|beers)\s+(?=\S)/i, '');
+    // On a regular menu a lone "Beer(s)" / "Draft" / "IPA" names nothing you could order.
+    if (!happyHour && /^(beers?|drafts?|draughts?|ipas?|lagers?|ales?|pilsners?|stouts?)$/i.test(clean)) return;
     // A bare "Can" or "Bottles" says nothing, and "Beer Mondays" is the name of the special, not the beer.
     if (/^(cans?|bottles?)$/i.test(clean) || /\b(mon|tues|wednes|thurs|fri|satur|sun)days?$/i.test(clean)) return;
     if (out.some((o) => o.price === price && o.item.toLowerCase() === clean.toLowerCase())) return;

@@ -116,13 +116,17 @@ app.get('/api/public-url', async () => ({ url: getPublicUrl() }));
 app.get('/api/status', async () => ({ ...repo.refreshStatus(), running: isRefreshing() }));
 
 const REFRESH_MIN_GAP_MS = 30 * 60_000;
-app.post('/api/refresh', async () => {
+// Weed refresh button: just the city you're looking at (San Diego / New York); no city = both.
+app.post('/api/refresh', async (req) => {
+  const r = (req.body as { region?: string } | undefined)?.region;
+  const region = r === 'us' || r === 'nyc' ? r : undefined;
   const st = repo.refreshStatus();
-  const age = st.lastRefreshAt ? Date.now() - new Date(st.lastRefreshAt).getTime() : Infinity;
+  const last = st.sources.filter((s) => !region || (s.region ?? 'us') === region).map((s) => s.finishedAt).sort().pop() ?? st.lastRefreshAt;
+  const age = last ? Date.now() - new Date(last).getTime() : Infinity;
   if (!isRefreshing() && age < REFRESH_MIN_GAP_MS) {
     return { ...st, running: false, throttled: true, nextAllowedAt: new Date(Date.now() - age + REFRESH_MIN_GAP_MS).toISOString() };
   }
-  refreshAll().catch((e) => console.error('[refresh]', e));
+  refreshAll(region ? { region } : {}).catch((e) => console.error('[refresh]', e));
   return { ...st, running: true };
 });
 
@@ -148,7 +152,7 @@ app.get('/api/beer/status', async () => ({ ...beerRepo.status(), running: isBeer
 // Refresh button: just the city you're looking at (San Diego in $, Athens in €); no city = both, one after the other.
 app.post('/api/beer/refresh', async (req) => {
   const r = (req.body as { region?: string } | undefined)?.region;
-  const region = r === 'us' || r === 'europe' ? r : undefined;
+  const region = r === 'us' || r === 'nyc' || r === 'europe' ? r : undefined;
   const st = beerRepo.status();
   const mine = st.sources.filter((s) => !region || BEER_STATUS_SOURCES[region].includes(s.source));
   const last = mine.map((s) => s.finishedAt).sort().pop() ?? st.lastRefreshAt;

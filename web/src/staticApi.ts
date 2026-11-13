@@ -10,7 +10,7 @@ import type { BeerPrice, BeerQuery, BeerReport, BeerVenue, Category, HappyHour, 
 import { rankItems, effectiveStore, haversineMiles } from '../../server/src/pricing/engine.ts';
 import { rankVenues } from '../../server/src/beer/rank.ts';
 import { fetchOsmVenues } from '../../server/src/beer/osm.ts';
-import { AREAS, regionOf } from '@gib/shared';
+import { AREAS, WEED_FILES, regionOf } from '@gib/shared';
 
 interface WeedSnapshot { stores: Store[]; products: import('@gib/shared').Product[]; deals: import('@gib/shared').Deal[]; status: RefreshStatus }
 interface BeerSnapshot { venues: BeerVenue[]; prices: BeerPrice[]; happyHours: HappyHour[]; status: RefreshStatus; area: { lat: number; lng: number; miles: number }; areas?: { lat: number; lng: number; miles: number }[] }
@@ -24,14 +24,19 @@ const DEFAULT_PROFILE: UserProfile = {
 const load = <T>(key: string, fallback: T): T => { try { const v = localStorage.getItem(key); return v ? JSON.parse(v) as T : fallback; } catch { return fallback; } };
 const save = (key: string, v: unknown) => localStorage.setItem(key, JSON.stringify(v));
 
-let weedP: Promise<WeedSnapshot> | null = null;
+const weedP = new Map<string, Promise<WeedSnapshot>>();
 let beerP: Promise<BeerSnapshot> | null = null;
 const getJson = async <T>(name: string): Promise<T> => {
   const r = await fetch(`${BASE}data/${name}`, { cache: 'no-cache' });
   if (!r.ok) throw new Error(`Couldn't load today's data (${r.status}). Try again in a minute.`);
   return r.json() as Promise<T>;
 };
-const weed = () => (weedP ??= getJson<WeedSnapshot>('weed.json').catch((e) => { weedP = null; throw e; }));
+/** Weed data for your city only (weed.json = San Diego, weed-nyc.json = New York). */
+const weed = () => {
+  const file = WEED_FILES[regionOf(profile().homeZip).id] ?? 'weed.json';
+  if (!weedP.has(file)) weedP.set(file, getJson<WeedSnapshot>(file).catch((e) => { weedP.delete(file); throw e; }));
+  return weedP.get(file)!;
+};
 const beer = () => (beerP ??= getJson<BeerSnapshot>('beer.json').catch((e) => { beerP = null; throw e; }));
 
 // ---------- profile (all on this phone) ----------
@@ -58,7 +63,7 @@ async function ensureArea(snap: BeerSnapshot, lat: number, lng: number, wantMile
   }
   try {
     await inflight.get(key);
-    return 'New area: places come from OpenStreetMap. Happy hours/prices are only checked daily for San Diego and Athens, so most places here show "No price yet".';
+    return 'New area: places come from OpenStreetMap. Happy hours/prices are only checked daily for San Diego, New York and Athens, so most places here show "No price yet".';
   } catch (e) {
     return `Couldn't load places here right now (${(e as Error).message}). Try again in a minute.`;
   }
@@ -103,7 +108,7 @@ export const staticApi = {
   publicUrl: async () => ({ url: location.origin + BASE }),
   zips: async () => AREAS,
   status: async (): Promise<RefreshStatus> => ({ ...(await weed()).status, running: false }),
-  refresh: async (): Promise<RefreshStatus> => {
+  refresh: async (_region?: 'us' | 'nyc' | 'europe'): Promise<RefreshStatus> => {
     const st = (await weed()).status;
     return { ...st, running: false, throttled: true, nextAllowedAt: nextMorning() };
   },
@@ -124,7 +129,7 @@ export const staticApi = {
       return { ...s.status, running: false, venues: s.venues.length, areas: 1 + areas.length };
     },
     // The website refreshes on GitHub (each city every morning, or by hand from the Actions tab), not from the phone.
-    refresh: async (_region?: 'us' | 'europe'): Promise<RefreshStatus> => ({ ...(await beer()).status, running: false, throttled: true, nextAllowedAt: nextMorning() }),
+    refresh: async (_region?: 'us' | 'nyc' | 'europe'): Promise<RefreshStatus> => ({ ...(await beer()).status, running: false, throttled: true, nextAllowedAt: nextMorning() }),
     /** No server here: reports are kept on this phone. */
     report: async (r: BeerReport): Promise<BeerPrice> => {
       const price = Number(r.price);

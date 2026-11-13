@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { PricedItem } from '@gib/shared';
 import FinePrint from './FinePrint.tsx';
+import { regionAt } from '@gib/shared';
 import { CardLink, PlaceHeader, cardClass } from './Place.tsx';
 
 const $ = (n: number) => `$${n.toFixed(2)}`;
@@ -32,7 +33,9 @@ export default function DealCard({ item, rank, onVisited, onPointMe }: { item: P
   const taxLabel = tax.included
     ? 'Taxes included'
     : `+${$(tax.total)} tax est.`;
-  const taxTitle = tax.included ? 'Shelf price already includes all taxes' : `Local ${$(tax.local)} · CA excise ${$(tax.excise)} · Sales ${$(tax.sales)}`;
+  const ny = regionAt(s).taxState === 'NY';
+  const taxTitle = tax.included ? 'Shelf price already includes all taxes'
+    : ny ? `NY state 9% ${$(tax.excise)} · Local 4% ${$(tax.local)} · no sales tax` : `Local ${$(tax.local)} · CA excise ${$(tax.excise)} · Sales ${$(tax.sales)}`;
 
   return (
     <article className={item.closerPick ? 'rounded-2xl p-4 space-y-3 border bg-orange-500/10 border-orange-500 ring-1 ring-orange-500/40' : cardClass('weed')}>
