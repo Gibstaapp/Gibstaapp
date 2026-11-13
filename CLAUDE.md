@@ -38,6 +38,7 @@ Two developers each work with their own Claude Code on this repo. Use a branch +
   - Badges: rules in `shared/badges.ts`, phone storage in `web/src/badges.ts`, `pages/BadgesPage.tsx`, `components/BadgeParty.tsx`.
 - **Regions / area codes:** `shared/areas.ts` (U.S. = San Diego, Europe = Athens: currency, units, weedLegal, time zone), Athens list in `shared/athens-postcodes.ts` (generated from OpenStreetMap, see `scripts/athens-postcodes/`). Web gets the region from `web/src/region.ts` (`useRegion`). Never hard-code `$` or `mi` in new UI: use `fmtDistance` / `CURRENCY_SYMBOL`.
 - **Launch cities** in the daily beer data: `LAUNCH_AREAS` in `server/src/beer/refresh.ts`.
+- **Two separate daily beer refreshes:** San Diego (`refreshBeer({ region: 'us' })`, dollars, status lines `osm` + `bar-websites`) and Athens (`region: 'europe'`, euros, `athens-places` + `athens-menus`). Each at 7 AM local time on the PC (`scheduler.ts`); on GitHub the morning run does both and a separate 7 AM Athens run uses `REFRESH=athens`. One city's refresh never touches the other's data or status (`mergeBeerStatus`). `npm run beer -w server -- --region europe` runs one.
 - **Opening hours (both sides):** `server/src/hours.ts` (open now, closing soon, Weedmaps hours -> opening_hours text, time zones).
 - **Shared types:** `shared/types.ts`, `shared/beer.ts`, `shared/badges.ts`.
 - **Prototype:** `BeerFinder/` is the original Kotlin + Python beer prototype, kept for reference only. Not built or run.

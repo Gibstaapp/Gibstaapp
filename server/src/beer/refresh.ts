@@ -1,8 +1,9 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { BeerPrice, BeerVenue, HappyHour, SourceStatus } from '@gib/shared';
-import { beerRepo, repo, type BeerArea } from '../db.ts';
+import type { BeerPrice, BeerVenue, HappyHour, RefreshStatus, SourceStatus } from '@gib/shared';
+import { beerRepo, repo, DEFAULT_PROFILE, type BeerArea } from '../db.ts';
+import { BEER_STATUS_SOURCES, regionAt, type RegionId } from '@gib/shared';
 import { haversineMiles } from '../pricing/engine.ts';
 import { fetchOsmVenues } from './osm.ts';
 import { crawlVenueSites } from './websites.ts';
@@ -69,7 +70,7 @@ export function loadSeed(venues: BeerVenue[], file = SEED_FILE): { venues: BeerV
   return { venues: newVenues, prices, happyHours };
 }
 
-function applySeed() {
+export function applySeed() {
   const seed = loadSeed(beerRepo.venues());
   beerRepo.upsertVenues(seed.venues);
   beerRepo.replaceFromSource(['seed', 'team'], seed.prices, seed.happyHours);
@@ -119,79 +120,101 @@ async function crawlArea(area: BeerArea) {
   return r;
 }
 
-// ---------- scheduled / refresh button: re-check every area in use ----------
-let running: Promise<SourceStatus[]> | null = null;
-export const isBeerRefreshing = () => running !== null || inflight.size > 0;
+// ---------- two separate daily refreshes: San Diego ($) and Athens (€) ----------
+// Each has its own places, website reading, status lines and schedule (7 AM local time), and a problem in one
+// never touches the other. refreshBeer() with no region runs both, one after the other (the refresh button).
 
-export function refreshBeer(opts: { forceOsm?: boolean } = {}): Promise<SourceStatus[]> {
-  if (running) return running;
-  running = (async () => {
-    const prev = beerRepo.status();
-    beerRepo.setStatus({ ...prev, running: true });
+export type BeerRegionId = RegionId;
+/** Status lines each refresh owns (shown in the app's refresh details). */
+export const BEER_SOURCES = BEER_STATUS_SOURCES as Record<RegionId, SourceStatus['source'][]>;
+export const BEER_REFRESH_TIME_ZONE: Record<RegionId, string> = { us: 'America/Los_Angeles', europe: 'Europe/Athens' };
+
+const running = new Map<RegionId, Promise<SourceStatus[]>>();
+export const isBeerRefreshing = () => running.size > 0 || inflight.size > 0;
+
+export async function refreshBeer(opts: { forceOsm?: boolean; region?: RegionId } = {}): Promise<SourceStatus[]> {
+  if (opts.region) return refreshBeerRegion(opts.region, !!opts.forceOsm);
+  const us = await refreshBeerRegion('us', !!opts.forceOsm).catch((e) => { console.error('[beer us]', e); return [] as SourceStatus[]; });
+  const eu = await refreshBeerRegion('europe', !!opts.forceOsm).catch((e) => { console.error('[beer europe]', e); return [] as SourceStatus[]; });
+  return [...us, ...eu];
+}
+
+/** This refresh's status lines replace only its own; the other city's stay exactly as they were. */
+export function mergeBeerStatus(prev: RefreshStatus, region: RegionId, mine: SourceStatus[] | null, isRunning: boolean): RefreshStatus {
+  const others = (prev.sources ?? []).filter((s) => !BEER_SOURCES[region].includes(s.source));
+  const sources = mine ? [...others, ...mine] : prev.sources ?? [];
+  return { ...prev, running: isRunning, sources, lastRefreshAt: sources.map((s) => s.finishedAt).sort().pop() ?? prev.lastRefreshAt };
+}
+const saveStatus = (region: RegionId, mine: SourceStatus[] | null) => beerRepo.setStatus(mergeBeerStatus(beerRepo.status(), region, mine, running.size > 0));
+
+function refreshBeerRegion(region: RegionId, forceOsm: boolean): Promise<SourceStatus[]> {
+  const already = running.get(region);
+  if (already) return already;
+  const job = (async () => {
+    saveStatus(region, null);
+    const [placesSrc, sitesSrc] = BEER_SOURCES[region];
+    const tag = region === 'europe' ? 'athens' : 'osm';
     const statuses: SourceStatus[] = [];
+    const mine = (a: { lat: number; lng: number }) => regionAt(a).id === region;
 
-    // Home area always; drop areas nobody has used in a month.
-    const home = repo.profile();
-    let areas = beerRepo.areas().filter((a) => Date.now() - new Date(a.usedAt).getTime() < AREA_KEEP_MS);
-    if (!areas.some((a) => haversineMiles(a.lat, a.lng, home.lat, home.lng) < 3 && a.miles >= HOME_MILES - 1)) {
-      areas.unshift({ lat: home.lat, lng: home.lng, miles: HOME_MILES, fetchedAt: new Date(0).toISOString(), usedAt: at() });
-    }
-    for (const c of LAUNCH_AREAS) {
+    // This region's areas (drop ones nobody has used in a month); always its home / launch city.
+    const all = beerRepo.areas().filter((a) => Date.now() - new Date(a.usedAt).getTime() < AREA_KEEP_MS);
+    const areas = all.filter(mine);
+    const keep = (c: { lat: number; lng: number; miles: number }) => {
       const have = areas.find((a) => haversineMiles(a.lat, a.lng, c.lat, c.lng) < 3 && a.miles >= c.miles - 1);
       if (have) have.usedAt = at();
-      else areas.push({ lat: c.lat, lng: c.lng, miles: c.miles, fetchedAt: new Date(0).toISOString(), usedAt: at() });
+      else areas.unshift({ lat: c.lat, lng: c.lng, miles: c.miles, fetchedAt: new Date(0).toISOString(), usedAt: at() });
+    };
+    if (region === 'us') {
+      const p = repo.profile();
+      keep(mine(p) ? { lat: p.lat, lng: p.lng, miles: HOME_MILES } : { lat: DEFAULT_PROFILE.lat, lng: DEFAULT_PROFILE.lng, miles: HOME_MILES });
+    } else {
+      for (const c of LAUNCH_AREAS) keep(c);
     }
 
     // 1. Places (OpenStreetMap), weekly per area.
     let osmFail: string | undefined;
     for (const a of areas) {
-      if (!opts.forceOsm && Date.now() - new Date(a.fetchedAt).getTime() < OSM_MAX_AGE_MS) continue;
+      if (!forceOsm && Date.now() - new Date(a.fetchedAt).getTime() < OSM_MAX_AGE_MS) continue;
       try {
-        beerRepo.upsertVenues(await fetchOsmVenues(a, log('osm')));
+        beerRepo.upsertVenues(await fetchOsmVenues(a, log(tag)));
         a.fetchedAt = at();
       } catch (e) { osmFail = (e as Error).message; }
     }
-    beerRepo.setAreas(areas);
-    const venues = beerRepo.venues();
-    const inUse = venues.filter((v) => areas.some((a) => inArea(a, v)));
-    statuses.push({ source: 'osm', ok: !osmFail, stores: inUse.length, products: 0, error: osmFail, finishedAt: at() });
+    beerRepo.setAreas([...beerRepo.areas().filter((a) => !mine(a)), ...areas]);
+    const inUse = beerRepo.venues().filter((v) => mine(v) && areas.some((a) => inArea(a, v)));
+    statuses.push({ source: placesSrc, ok: !osmFail, stores: inUse.length, products: 0, error: osmFail, finishedAt: at() });
 
-    // 2. Hand-entered places/prices.
+    // 2. Hand-entered places/prices (both cities live in one file; applying it is cheap and idempotent).
     applySeed();
 
-    // 3. Bar & brewery websites (happy hours, menu prices), dollars. Athens has its own step below.
-    const usVenues = inUse.filter((v) => !inGreece(v));
-    try {
-      const r = await crawlVenueSites(usVenues, log('web'));
-      beerRepo.replaceWebsiteFor(usVenues.filter((v) => v.website).map((v) => v.id), r.prices, r.happyHours);
-      areas = beerRepo.areas();
-      for (const a of areas) a.crawledAt = at();
-      beerRepo.setAreas(areas);
-      statuses.push({ source: 'bar-websites', ok: true, stores: r.sitesWithInfo, products: r.prices.length + r.happyHours.length, finishedAt: at() });
-    } catch (e) {
-      statuses.push({ source: 'bar-websites', ok: false, stores: 0, products: 0, error: (e as Error).message, finishedAt: at() });
-    }
-
-    // 4. Separate step: Athens bars' own websites, read for euro prices (Greek or English).
-    statuses.push(await refreshAthensMenus(inUse.filter((v) => inGreece(v))));
-
-    beerRepo.setStatus({ running: false, lastRefreshAt: at(), sources: statuses });
+    // 3. The bars' own websites: dollars in San Diego, euros (Greek or English) in Athens.
+    statuses.push(region === 'europe'
+      ? await refreshAthensMenus(inUse)
+      : await readSites(inUse, 'USD', sitesSrc, log('web')));
+    const done = beerRepo.areas();
+    for (const a of done) if (mine(a)) a.crawledAt = at();
+    beerRepo.setAreas(done);
     return statuses;
-  })().finally(() => { running = null; });
-  return running;
+  })();
+  running.set(region, job);
+  return job.then((st) => { running.delete(region); saveStatus(region, st); return st; }, (e) => { running.delete(region); saveStatus(region, null); throw e; });
+}
+
+async function readSites(venues: BeerVenue[], currency: 'USD' | 'EUR', source: SourceStatus['source'], logFn: (m: string) => void): Promise<SourceStatus> {
+  try {
+    const r = await crawlVenueSites(venues, logFn, 8, currency);
+    beerRepo.replaceWebsiteFor(r.readIds, r.prices, r.happyHours);
+    return { source, ok: true, stores: r.sitesWithInfo, products: r.prices.length + r.happyHours.length, finishedAt: at() };
+  } catch (e) {
+    return { source, ok: false, stores: 0, products: 0, error: (e as Error).message, finishedAt: at() };
+  }
 }
 
 /**
- * Athens: read the bars' own websites for euro prices and happy hours. Runs every morning with the beer refresh,
- * as its own step with its own status line ("Athens bar menus (€)"); `npm run athens -w server` runs just this.
- * A site that fails keeps its previous prices (only sites we actually read are replaced).
+ * Athens: read the bars' own websites for euro prices and happy hours (the website step of the Athens refresh;
+ * `npm run athens -w server` runs just this). A site that fails to load keeps its previous prices.
  */
 export async function refreshAthensMenus(venues: BeerVenue[] = beerRepo.venues().filter((v) => inGreece(v))): Promise<SourceStatus> {
-  try {
-    const r = await crawlVenueSites(venues, log('athens'), 8, 'EUR');
-    beerRepo.replaceWebsiteFor(r.readIds, r.prices, r.happyHours);
-    return { source: 'athens-menus', ok: true, stores: r.sitesWithInfo, products: r.prices.length + r.happyHours.length, finishedAt: at() };
-  } catch (e) {
-    return { source: 'athens-menus', ok: false, stores: 0, products: 0, error: (e as Error).message, finishedAt: at() };
-  }
+  return readSites(venues, 'EUR', 'athens-menus', log('athens'));
 }

@@ -3,7 +3,7 @@ import { AREAS, ATHENS_POSTCODES, MAX_RESULT_MILES, SD_ZIPS, distanceChoices, fm
 import { DEFAULT_PROFILE } from '../src/db.ts';
 import { openState } from '../src/hours.ts';
 import { ouncesOf, rankVenues } from '../src/beer/rank.ts';
-import { loadSeed } from '../src/beer/refresh.ts';
+import { loadSeed, mergeBeerStatus } from '../src/beer/refresh.ts';
 import { dedupe } from '../src/beer/osm.ts';
 import { haversineMiles, rankItems } from '../src/pricing/engine.ts';
 
@@ -136,5 +136,24 @@ describe('San Diego and Athens stay apart', () => {
     expect(r.best).toMatchObject({ price: 5, currency: 'EUR' });
     expect(regionAt(athensBar).currency).toBe('EUR');
     expect(regionAt(sdBar).currency).toBe('USD');
+  });
+});
+
+describe('separate daily refreshes: San Diego ($) and Athens (€)', () => {
+  const line = (source: any, finishedAt: string, ok = true) => ({ source, ok, stores: 1, products: 1, finishedAt });
+  const prev = { running: false, lastRefreshAt: '2026-11-13T14:00:00Z', sources: [line('osm', '2026-11-13T14:00:00Z'), line('bar-websites', '2026-11-13T14:01:00Z'), line('athens-places', '2026-11-13T05:00:00Z'), line('athens-menus', '2026-11-13T05:01:00Z')] };
+  it("Athens' refresh replaces only Athens' status lines", () => {
+    const next = mergeBeerStatus(prev, 'europe', [line('athens-places', '2026-11-14T05:00:00Z'), line('athens-menus', '2026-11-14T05:02:00Z', false)], false);
+    expect(next.sources.find((s) => s.source === 'osm')!.finishedAt).toBe('2026-11-13T14:00:00Z');
+    expect(next.sources.find((s) => s.source === 'bar-websites')!.ok).toBe(true);
+    expect(next.sources.find((s) => s.source === 'athens-menus')).toMatchObject({ ok: false, finishedAt: '2026-11-14T05:02:00Z' });
+    expect(next.sources).toHaveLength(4);
+  });
+  it("San Diego's refresh leaves Athens alone", () => {
+    const next = mergeBeerStatus(prev, 'us', [line('osm', '2026-11-14T14:00:00Z'), line('bar-websites', '2026-11-14T14:03:00Z')], false);
+    expect(next.sources.filter((s) => s.source.startsWith('athens')).map((s) => s.finishedAt)).toEqual(['2026-11-13T05:00:00Z', '2026-11-13T05:01:00Z']);
+  });
+  it('starting a refresh only marks it running', () => {
+    expect(mergeBeerStatus(prev, 'us', null, true)).toMatchObject({ running: true, sources: prev.sources });
   });
 });

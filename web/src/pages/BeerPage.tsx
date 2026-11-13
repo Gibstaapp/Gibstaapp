@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { CURRENCY_SYMBOL, MAX_RESULT_MILES, regionAt, distanceChoices, fmtDistance, type BeerPrice, type BeerSort, type BeerVenueKind, type OpenStatus, type RankedVenue, type UserProfile } from '@gib/shared';
+import { BEER_STATUS_SOURCES, CURRENCY_SYMBOL, MAX_RESULT_MILES, regionAt, distanceChoices, fmtDistance, type BeerPrice, type BeerSort, type BeerVenueKind, type OpenStatus, type RankedVenue, type UserProfile } from '@gib/shared';
 import { snapTo, useRegion } from '../region.ts';
 import { MapContainer, TileLayer, CircleMarker, Popup } from 'react-leaflet';
 import { api, STATIC } from '../api.ts';
@@ -84,6 +84,12 @@ export default function BeerPage({ profile, top }: { profile: UserProfile; top: 
   const region = useRegion();
   const choices = distanceChoices(region.units, DISTANCES_MI, DISTANCES_KM);
   const [maxMiles, setMaxMiles] = useState(() => snapTo(Number(pref.get('gib.beer.miles')) || 10, choices));
+  // Your city's own daily refresh: San Diego ($) and Athens (€) update separately.
+  const statusFn = useCallback(async () => {
+    const s = await api.beer.status();
+    const sources = s.sources.filter((x) => BEER_STATUS_SOURCES[region.id].includes(x.source));
+    return { ...s, sources, lastRefreshAt: sources.map((x) => x.finishedAt).sort().pop() ?? s.lastRefreshAt };
+  }, [region.id]);
   const [view, setView] = useState<PlaceView>(() => (pref.get('gib.beer.view') as PlaceView) || 'list');
   const [list, setList] = useState<RankedVenue[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -152,7 +158,7 @@ export default function BeerPage({ profile, top }: { profile: UserProfile; top: 
       <header className={`sticky top-0 z-20 ${ACCENT.beer.header} backdrop-blur border-b border-zinc-800 pt-[env(safe-area-inset-top)]`}>
         <div className="px-4 pt-3 pb-2 flex items-center justify-between gap-3">
           {top}
-          <RefreshBar onRefreshed={load} statusFn={api.beer.status} refreshFn={api.beer.refresh} accent="beer" />
+          <RefreshBar onRefreshed={load} statusFn={statusFn} refreshFn={api.beer.refresh} accent="beer" />
         </div>
         <Chips accent="beer" items={KINDS} value={kind} onChange={setKind} />
         <div className="flex flex-wrap items-center gap-2 px-4 pb-3 text-sm">

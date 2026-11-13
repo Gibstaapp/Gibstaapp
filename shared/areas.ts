@@ -72,6 +72,9 @@ export const AREAS: Record<string, HomeArea> = {
 
 export const regionOf = (homeZip: string | undefined): Region => REGIONS[(homeZip && AREAS[homeZip]?.region) || 'us'];
 
+/** Each city's daily beer refresh owns these status lines (San Diego in dollars, Athens in euros). */
+export const BEER_STATUS_SOURCES: Record<RegionId, string[]> = { us: ['osm', 'bar-websites'], europe: ['athens-places', 'athens-menus'] };
+
 /** Nothing farther than this from your home area code is ever shown (keeps San Diego and Athens apart). */
 export const MAX_RESULT_MILES = 100;
 
