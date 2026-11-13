@@ -25,22 +25,54 @@ export interface BeerSnapshot { venues: BeerVenue[]; prices: BeerPrice[]; happyH
 const outDir = resolve(process.argv[2] ?? 'static-data');
 const KEEP_PER_STORE_CATEGORY = 60;
 
+async function fetchSnap(dir: string | undefined): Promise<{ w: WeedSnapshot | null; b: BeerSnapshot | null }> {
+  if (!dir) return { w: null, b: null };
+  const get = <T>(f: string) => fetch(`${dir.replace(/\/+$/, '')}/${f}`, { cache: 'no-store' }).then((r) => (r.ok ? r.json() as Promise<T> : null)).catch(() => null);
+  const [w, b] = await Promise.all([get<WeedSnapshot>('weed.json'), get<BeerSnapshot>('beer.json')]);
+  return { w, b };
+}
+
+const okAt = (st: RefreshStatus | undefined, source: string) => {
+  const s = st?.sources.find((x) => x.source === source && x.ok && (x.products > 0 || x.stores > 0));
+  return s ? new Date(s.finishedAt).getTime() : -1;
+};
+
+/** Per source, keep whichever snapshot got it most recently. */
+export function mergeWeed(snaps: WeedSnapshot[]): WeedSnapshot | null {
+  if (!snaps.length) return null;
+  const sources = new Set(snaps.flatMap((s) => [...s.status.sources.map((x) => x.source), ...s.products.map((p) => p.source)]));
+  const products: Product[] = [], deals: Deal[] = [], statuses: RefreshStatus['sources'] = [];
+  const storeById = new Map<string, Store>();
+  for (const src of sources) {
+    const best = [...snaps].sort((a, b) => okAt(b.status, src) - okAt(a.status, src))[0];
+    products.push(...best.products.filter((p) => p.source === src));
+    deals.push(...best.deals.filter((d) => d.source === src));
+    for (const s of best.stores) if (s.sources.some((x) => x.source === src)) storeById.set(s.id, s);
+    const st = best.status.sources.find((x) => x.source === src);
+    if (st) statuses.push(st);
+  }
+  const used = new Set(products.map((p) => p.storeId));
+  return {
+    stores: [...storeById.values()].filter((s) => used.has(s.id)), products, deals,
+    status: { running: false, lastRefreshAt: snaps.map((s) => s.status.lastRefreshAt ?? '').sort().pop(), sources: statuses },
+  };
+}
+
+/**
+ * Start from the best data we already have, so a source that fails today keeps its last good data:
+ *  - PREV_URL: the live website's current data
+ *  - PC_DATA_URL: data pushed by the PC to the `data` branch (the PC can reach sources GitHub can't, e.g. Dutchie)
+ */
 async function loadPrevious() {
-  const base = process.env.PREV_URL?.replace(/\/+$/, '');
-  if (!base) return;
-  try {
-    const [w, b] = await Promise.all([
-      fetch(`${base}/data/weed.json`).then((r) => (r.ok ? r.json() as Promise<WeedSnapshot> : null)),
-      fetch(`${base}/data/beer.json`).then((r) => (r.ok ? r.json() as Promise<BeerSnapshot> : null)),
-    ]);
-    if (w) { repo.replaceCatalog(w.stores, w.products, w.deals); repo.setRefreshStatus(w.status); console.log(`[export] previous weed: ${w.products.length} products`); }
-    if (b) {
-      beerRepo.upsertVenues(b.venues);
-      beerRepo.replaceWebsiteFor(b.venues.map((v) => v.id), b.prices.filter((p) => p.source === 'website'), b.happyHours);
-      console.log(`[export] previous beer: ${b.venues.length} places`);
-    }
-  } catch (e) {
-    console.warn('[export] no previous snapshot:', (e as Error).message);
+  const prev = await fetchSnap(process.env.PREV_URL && `${process.env.PREV_URL.replace(/\/+$/, '')}/data`);
+  const pc = await fetchSnap(process.env.PC_DATA_URL);
+  const w = mergeWeed([prev.w, pc.w].filter((x): x is WeedSnapshot => !!x));
+  if (w) { repo.replaceCatalog(w.stores, w.products, w.deals); repo.setRefreshStatus(w.status); console.log(`[export] starting weed data: ${w.products.length} products (${w.status.sources.map((s) => s.source).join(', ')})`); }
+  for (const b of [prev.b, pc.b].filter((x): x is BeerSnapshot => !!x).sort((a, b) => okAt(a.status, 'bar-websites') - okAt(b.status, 'bar-websites'))) {
+    beerRepo.upsertVenues(b.venues);
+    if (b.prices.length || b.happyHours.length) beerRepo.replaceWebsiteFor(b.venues.map((v) => v.id), b.prices.filter((p) => p.source === 'website'), b.happyHours);
+    if (b.venues.length) beerRepo.setStatus(b.status);
+    console.log(`[export] starting beer data: ${b.venues.length} places`);
   }
 }
 
@@ -62,12 +94,21 @@ function trimProducts(stores: Store[], products: Product[], deals: Deal[]): Prod
 }
 
 await loadPrevious();
+const weedBefore = repo.refreshStatus(), beerBefore = beerRepo.status();
 console.log('[export] sources:', Object.entries(config.sources).filter(([, on]) => on).map(([k]) => k).join(', '));
 // SKIP_REFRESH=1: just export what's in the database (for testing).
-const [weedStatus] = process.env.SKIP_REFRESH ? [repo.refreshStatus()] : await Promise.all([
+const [weedRun] = process.env.SKIP_REFRESH ? [repo.refreshStatus()] : await Promise.all([
   refreshAll(),
   refreshBeer({ forceOsm: true }).catch((e) => console.error('[export] beer', e)),
 ]);
+
+// A source that failed today is still shown with its last good data: report that, not the failure.
+const keepGood = (now: RefreshStatus, before: RefreshStatus): RefreshStatus => ({
+  ...now,
+  sources: now.sources.map((x) => (x.ok ? x : before.sources.find((b) => b.source === x.source && b.ok) ?? x)),
+});
+const weedStatus = keepGood(weedRun, weedBefore);
+beerRepo.setStatus(keepGood(beerRepo.status(), beerBefore));
 
 const stores = repo.stores(), deals = repo.deals();
 const products = trimProducts(stores, repo.products(), deals);

@@ -62,7 +62,9 @@ export function toVenue(e: OsmEl): BeerVenue | null {
 export async function fetchOsmVenues(area: { lat: number; lng: number; miles: number }, log: (m: string) => void = () => {}): Promise<BeerVenue[]> {
   const query = queryFor(bboxAround(area.lat, area.lng, area.miles));
   let lastErr: unknown;
-  for (const url of MIRRORS) {
+  // Overpass servers are often busy for a minute: go through the mirrors twice, with a pause.
+  for (const [round, url] of [...MIRRORS.map((u) => [0, u] as const), ...MIRRORS.map((u) => [1, u] as const)]) {
+    if (round === 1 && url === MIRRORS[0]) await new Promise((r) => setTimeout(r, 20_000));
     try {
       const res = await fetch(url, {
         method: 'POST',

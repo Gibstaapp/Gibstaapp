@@ -16,6 +16,7 @@ export interface Config {
   passcode?: string;          // required to use the site/app when set
   tunnel: boolean;            // public link via Cloudflare quick tunnel
   linkTopic?: string;         // private ntfy topic where the current public link is posted (the Android app reads it)
+  publishData?: boolean;      // after the morning refresh, push data to the repo's `data` branch for the GitHub Pages site
 }
 
 const defaults: Config = {

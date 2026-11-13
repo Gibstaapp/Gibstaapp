@@ -50,7 +50,7 @@ const inflight = new Map<string, Promise<void>>();
 async function ensureArea(snap: BeerSnapshot, lat: number, lng: number, wantMiles: number): Promise<string | null> {
   const need = Math.min(wantMiles, 15);
   const covers = (a: { lat: number; lng: number; miles: number }) => haversineMiles(a.lat, a.lng, lat, lng) + need <= a.miles;
-  if (covers(snap.area) || areas.some(covers)) return null;
+  if ((snap.venues.length > 0 && covers(snap.area)) || areas.some(covers)) return null; // empty daily file = load places in the browser
   const key = `${lat.toFixed(2)},${lng.toFixed(2)}`;
   if (!inflight.has(key)) {
     const miles = Math.min(25, Math.max(10, wantMiles + 3));
