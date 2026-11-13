@@ -120,7 +120,7 @@ export default function BeerPage({ profile, top }: { profile: UserProfile; top: 
 
   const current = list?.[idx] ?? null;
   const target: CompassTarget | null = current && {
-    id: current.venue.id, name: `${KIND_ICON[current.venue.kind]} ${current.venue.name}`, lat: current.venue.lat, lng: current.venue.lng,
+    id: current.venue.id, name: `${KIND_ICON[current.venue.kind]} ${current.venue.name}`, placeName: current.venue.name, lat: current.venue.lat, lng: current.venue.lng,
     headline: current.best ? (
       <div className="flex flex-wrap items-baseline gap-x-2">
         <span className={`text-2xl font-bold ${ACCENT.beer.text}`}>{money(current.best.price)}</span>
@@ -164,7 +164,7 @@ export default function BeerPage({ profile, top }: { profile: UserProfile; top: 
       )}
 
       {list && list.length > 0 && view === 'compass' && (
-        <Compass fix={fix} target={target} accent={ACCENT.beer.hex} locationError={locError} onRetryLocation={retry}
+        <Compass fix={fix} target={target} side="beer" locationError={locError} onRetryLocation={retry}
           position={`${idx + 1} of ${list.length}`}
           onPrev={idx > 0 ? () => setIdx(idx - 1) : undefined}
           onNext={idx < list.length - 1 ? () => setIdx(idx + 1) : undefined} />

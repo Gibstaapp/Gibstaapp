@@ -35,7 +35,7 @@ export default function WeedCompass({ items, profile, startStoreId }: { items: P
     </>),
   };
   return (
-    <Compass fix={fix} target={target} accent={ACCENT.weed.hex} locationError={error} onRetryLocation={retry}
+    <Compass fix={fix} target={target} side="weed" locationError={error} onRetryLocation={retry}
       position={`${idx + 1} of ${stops.length}`}
       onPrev={idx > 0 ? () => setIdx(idx - 1) : undefined}
       onNext={idx < stops.length - 1 ? () => setIdx(idx + 1) : undefined} />

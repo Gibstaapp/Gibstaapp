@@ -8,13 +8,15 @@ import StoresPage from './pages/StoresPage.tsx';
 import SettingsPage from './pages/SettingsPage.tsx';
 import ServerSetup from './pages/ServerSetup.tsx';
 import BeerPage from './pages/BeerPage.tsx';
+import BadgesPage from './pages/BadgesPage.tsx';
+import { Logo } from './components/Place.tsx';
 
 type AppMode = 'weed' | 'beer';
 
 /** The Weed / Beer switch at the top of every screen. */
 function ModeSwitch({ mode, onChange }: { mode: AppMode; onChange: (m: AppMode) => void }) {
   return (
-    <div className="flex rounded-full bg-zinc-900 border border-zinc-700 p-0.5 text-sm font-semibold">
+    <div className="inline-flex shrink-0 rounded-full bg-zinc-900 border border-zinc-700 p-0.5 text-sm font-semibold">
       <button onClick={() => onChange('weed')} className={`px-3 py-1 rounded-full ${mode === 'weed' ? 'bg-green-500 text-black' : 'text-zinc-400'}`}>🌿 Weed</button>
       <button onClick={() => onChange('beer')} className={`px-3 py-1 rounded-full ${mode === 'beer' ? 'bg-amber-500 text-black' : 'text-zinc-400'}`}>🍺 Beer</button>
     </div>
@@ -22,7 +24,7 @@ function ModeSwitch({ mode, onChange }: { mode: AppMode; onChange: (m: AppMode) 
 }
 
 // Both modes: Deals (list / map / compass, switched in the header) + Settings. Weed also has Stores.
-type Tab = 'deals' | 'stores' | 'settings';
+type Tab = 'deals' | 'stores' | 'badges' | 'settings';
 
 export default function App() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -58,11 +60,11 @@ export default function App() {
   if (!profile) return <div className="p-6 text-zinc-400">Loading…</div>;
   if (!profile.onboarded) return <Onboarding profile={profile} onDone={setProfile} />;
 
-  const top = <ModeSwitch mode={mode} onChange={setMode} />;
+  const top = <div className="flex items-center gap-2"><Logo /><ModeSwitch mode={mode} onChange={setMode} /></div>;
   const plainTop = <div className="px-4 pt-[calc(env(safe-area-inset-top)+0.75rem)]">{top}</div>;
   const navItems: readonly (readonly [Tab, string, string])[] = mode === 'weed'
-    ? [['deals', 'Deals', '🌿'], ['stores', 'Stores', '🏪'], ['settings', 'Settings', '⚙️']]
-    : [['deals', 'Deals', '🍺'], ['settings', 'Settings', '⚙️']];
+    ? [['deals', 'Deals', '🌿'], ['stores', 'Stores', '🏪'], ['badges', 'Badges', '🏅'], ['settings', 'Settings', '⚙️']]
+    : [['deals', 'Deals', '🍺'], ['badges', 'Badges', '🏅'], ['settings', 'Settings', '⚙️']];
   const activeColor = mode === 'weed' ? 'text-green-400' : 'text-amber-400';
 
   return (
@@ -71,10 +73,11 @@ export default function App() {
         {mode === 'weed' && tab === 'deals' && <DealsPage profile={profile} onProfile={setProfile} top={top} />}
         {mode === 'weed' && tab === 'stores' && <>{plainTop}<StoresPage profile={profile} onProfile={setProfile} /></>}
         {mode === 'beer' && tab === 'deals' && <BeerPage profile={profile} top={top} />}
-        {tab === 'settings' && <>{plainTop}<SettingsPage profile={profile} onProfile={setProfile} onChangeServer={() => setNeedServer(true)} /></>}
+        {tab === 'badges' && <>{plainTop}<BadgesPage side={mode} /></>}
+        {tab === 'settings' && <>{plainTop}<SettingsPage accent={mode} profile={profile} onProfile={setProfile} onChangeServer={() => setNeedServer(true)} /></>}
       </main>
       <nav className={`fixed bottom-0 inset-x-0 backdrop-blur border-t border-zinc-800 pb-[env(safe-area-inset-bottom)] ${mode === 'weed' ? 'bg-[#0e1714]/95' : 'bg-[#17130b]/95'}`}>
-        <div className={`max-w-3xl mx-auto grid ${navItems.length === 3 ? 'grid-cols-3' : 'grid-cols-2'}`}>
+        <div className={`max-w-3xl mx-auto grid ${navItems.length === 4 ? 'grid-cols-4' : 'grid-cols-3'}`}>
           {navItems.map(([id, label, icon]) => (
             <button key={id} onClick={() => setTab(id)} className={`py-3 text-sm flex flex-col items-center gap-0.5 ${tab === id ? activeColor : 'text-zinc-400'}`}>
               <span className="text-lg leading-none">{icon}</span>{label}

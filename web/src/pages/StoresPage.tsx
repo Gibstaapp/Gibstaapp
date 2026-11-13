@@ -44,7 +44,7 @@ export default function StoresPage({ profile, onProfile }: { profile: UserProfil
     .sort((a, b) => a.d - b.d);
 
   return (
-    <div className="p-4 space-y-3 pt-[calc(env(safe-area-inset-top)+1rem)]">
+    <div className="p-4 space-y-3">
       <div>
         <h2 className="text-lg font-semibold">Stores</h2>
         <p className="text-xs text-zinc-400">Fix anything auto-detection got wrong. Your answers override what the menus say.</p>

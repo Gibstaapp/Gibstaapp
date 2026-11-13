@@ -208,3 +208,4 @@ export interface RefreshStatus {
   sources: SourceStatus[];
 }
 export * from './beer.ts';
+export * from './badges.ts';

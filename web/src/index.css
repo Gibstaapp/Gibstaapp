@@ -6,3 +6,23 @@ body { -webkit-tap-highlight-color: transparent; }
 .leaflet-container { background: #0b1210; }
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { scrollbar-width: none; }
+
+/* ---- Compass "getting warmer" indicator ---- */
+.gib-heat-grow { transform-origin: 50px 50px; transition: transform 2.5s ease-out; }
+.gib-burn-drift { transform-origin: 50px 50px; animation: gib-drift 60s linear infinite; }
+.gib-burn-flicker { transform-origin: 50px 50px; animation: gib-flicker 1.7s ease-in-out infinite alternate; }
+.gib-slosh { transform-origin: 50px 50px; animation: gib-slosh 2.6s ease-in-out infinite alternate; }
+@keyframes gib-drift { to { transform: rotate(360deg); } }
+@keyframes gib-flicker { 0% { opacity: .82; transform: scale(.985); } 40% { opacity: 1; } 70% { opacity: .9; transform: scale(1.02); } 100% { opacity: .96; transform: scale(1); } }
+@keyframes gib-slosh { 0% { transform: translateX(-3.2px) rotate(-3deg); } 100% { transform: translateX(3.2px) rotate(3deg); } }
+
+/* ---- New-badge celebration ---- */
+.gib-pop { animation: gib-pop .5s cubic-bezier(.2, 1.6, .4, 1) both; }
+.gib-confetti { position: absolute; top: -2rem; font-size: 1.5rem; animation: gib-fall 2.4s linear infinite; }
+@keyframes gib-pop { from { transform: scale(.5); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+@keyframes gib-fall { to { transform: translateY(110vh) rotate(540deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .gib-burn-drift, .gib-burn-flicker, .gib-slosh, .gib-confetti, .gib-pop { animation: none; }
+  .gib-heat-grow { transition: none; }
+}

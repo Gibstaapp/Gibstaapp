@@ -128,3 +128,18 @@ export const pref = {
   get: (k: string) => { try { return localStorage.getItem(k); } catch { return null; } },
   set: (k: string, v: string) => { try { localStorage.setItem(k, v); } catch { /* private mode */ } },
 };
+
+/** The Gibstaapp logo: a compass. Half the needle is weed green, half is beer amber. */
+export function Logo({ size = 32 }: { size?: number }) {
+  return (
+    <svg viewBox="0 0 64 64" width={size} height={size} role="img" aria-label="Gibstaapp" className="shrink-0">
+      <circle cx="32" cy="32" r="27" fill="#18181b" stroke="#e4e4e7" strokeWidth="3.5" />
+      <g stroke="#a1a1aa" strokeWidth="3" strokeLinecap="round"><path d="M32 9v5M32 50v5M9 32h5M50 32h5" /></g>
+      <g transform="rotate(35 32 32)">
+        <polygon points="32,10 39,32 25,32" fill="#22c55e" />
+        <polygon points="32,54 39,32 25,32" fill="#f59e0b" />
+      </g>
+      <circle cx="32" cy="32" r="3.5" fill="#fafafa" />
+    </svg>
+  );
+}

@@ -65,20 +65,25 @@ export function parseTimeRange(text: string): { start: string; end: string } | n
 
 const BEER_WORD = String.raw`(?:drafts?|draughts?|pints?|beers?|brews?|taps?|domestics?|crafts?|tall ?boys?|lagers?|ipas?|pilsners?|bottles?|cans?|mich(?:elob)?(?: ultra)?|coors(?: light)?|bud(?: light)?|modelo|pacifico|tecate|corona|stella|blue moon|pbr|miller(?: lite)?|house beers?)`;
 // Not beer, or not a single beer: wine/soda/food/etc. near the price.
-const NOT_BEER_CONTEXT = /\b(wine|glass|soda|juice|coke|sprite|lemonade|iced tea|coffee|kombucha|root beer|ginger beer|ice cream|float|soaked|battered|fried|cheese|sauce|bratwurst|upgrade)\b/i;
-const SKIP_WORD = /pitcher|bucket|tower|growler|keg|flight|off\b|wings?|tacos?|food|wine|wells?|cocktail|margarita|shot|sliders?|fries|burger|pizza|appetizer/i;
+const NOT_BEER_CONTEXT = /\b(wine|glass|soda|juice|coke|sprite|lemonade|iced tea|coffee|kombucha|root beer|ginger beer|ice cream|float|soaked|battered|fried|cheese|sauce|bratwurst|upgrade|cocktails?|highballs?|spritz|champagne|mimosas?|all you can|spaghetti)\b/i;
+const SKIP_WORD = /pitcher|bucket|tower|growler|keg|flight|off\b|wings?|tacos?|food|wine|wells?|cocktail|margarita|mimosa|champagne|shot|sliders?|fries|burger|pizza|appetizer/i;
 
 /** "$5 drafts", "$4 domestic pints", "Pints $6", "Coors Light - $3.50" */
 export function parsePrices(text: string, happyHour: boolean): FoundPrice[] {
   const out: FoundPrice[] = [];
-  const before = new RegExp(String.raw`\$\s?(\d{1,2}(?:\.\d{2})?)\s+((?:[a-z]+ ){0,2}${BEER_WORD})`, 'gi');
-  const after = new RegExp(String.raw`(${BEER_WORD}(?: (?!and\b|or\b|with\b|plus\b|&)[a-z]+){0,2})\s*(?:[:\-–]|for|are|just|only)?\s*\$\s?(\d{1,2}(?:\.\d{2})?)`, 'gi');
+  const before = new RegExp(String.raw`\$\s?(\d{1,2}(?:\.\d{2})?)\s+((?:[a-z]+ ){0,2}${BEER_WORD})\b`, 'gi');
+  const after = new RegExp(String.raw`\b(${BEER_WORD}\b(?: (?!and\b|or\b|with\b|plus\b|&)[a-z]+){0,2})\s*(?:[:\-–]|for|are|just|only)?\s*\$\s?(\d{1,2}(?:\.\d{2})?)`, 'gi');
   const push = (price: number, item: string, at: number, end: number) => {
     // '$7 wells' after a beer word: the price belongs to the next thing
     if (end >= 0 && SKIP_WORD.test(text.slice(end, end + 14))) return;
     const ctx = text.slice(Math.max(0, at - 25), at + item.length + 30);
     if (SKIP_WORD.test(item) || NOT_BEER_CONTEXT.test(text.slice(Math.max(0, at - 30), (end >= 0 ? end : at + item.length + 8) + 12)) || /\$\s?\d+(?:\.\d{2})?\s*off/i.test(ctx.slice(20, 45))) return;
     if (price < 1.5 || price > 15) return;
+    const lead = text.slice(Math.max(0, at - 24), at);
+    // "+$2 ..." is an add-on, "2 Tacos + Mexican Lager $14" is a combo: neither is the price of a beer.
+    if (/\+\s*$/.test(lead) || /\+\s*(?:[a-z]+ ){0,2}$/i.test(lead)) return;
+    // "$6 until 6pm": a timed special we can't place, so don't show it as the everyday price.
+    if (!happyHour && end >= 0 && /^\s*(?:until|till?|before)\s+\d/i.test(text.slice(end, end + 16))) return;
     const clean = item.trim().replace(/\s+/g, ' ');
     if (out.some((o) => o.price === price && o.item.toLowerCase() === clean.toLowerCase())) return;
     const size = /pint/i.test(clean) ? 'pint' : /tall ?boy/i.test(clean) ? '24oz' : /\b(can|bottle)s?\b/i.test(clean) ? '12oz' : undefined;

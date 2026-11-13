@@ -29,7 +29,12 @@ export function parseGrams(...texts: (string | undefined | null)[]): number | un
   if (pack) {
     if (pack[1]) return round3(parseFloat(pack[1]) * parseInt(pack[2]));
     if (pack[3]) return round3(parseInt(pack[3]) * parseFloat(pack[4]));
-    if (pack[5]) return round3(parseInt(pack[5]) * parseFloat(pack[6]));
+    if (pack[5]) {
+      // "5pk 0.35g" = five 0.35g joints (1.75g), but "14pk 7g" = 7g in total (fourteen half-gram joints).
+      // If the weight split across the pack still gives a real joint size (0.25g+), it's the total.
+      const n = parseInt(pack[5]), g = parseFloat(pack[6]);
+      return n > 1 && g / n >= 0.25 ? g : round3(n * g);
+    }
   }
   const g = s.match(/(\d*\.?\d+)\s*(?:g|gr|gram|grams)\b/i);
   if (g) return parseFloat(g[1]);
@@ -93,7 +98,7 @@ function mergeInto(target: Store, s: Store): Store {
   return {
     ...target,
     ...(betterAddr ? { address: s.address, lat: s.lat, lng: s.lng, city: s.city || target.city } : {}),
-    sources: [...target.sources, ...s.sources],
+    sources: [...target.sources, ...s.sources.filter((x) => !target.sources.some((t) => t.source === x.source && t.externalId === x.externalId))],
     pickup: target.pickup || s.pickup,
     menuUrl: target.menuUrl ?? s.menuUrl,
     website: target.website ?? s.website,
