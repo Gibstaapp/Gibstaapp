@@ -1,5 +1,6 @@
 import type { BeerPrice, BeerVenue, HappyHour } from '@gib/shared';
 import { extractEuroHappyHour, extractHappyHour, htmlToText, parseEuroPrices, parsePrices } from './extract.ts';
+import { MAX_PDF_BYTES, OcrSession, pdfLinks, pdfToText } from './pdf.ts';
 
 /**
  * Light crawl of bar/brewery websites: the homepage plus up to 3 likely pages
@@ -19,6 +20,18 @@ async function get(url: string): Promise<string | null> {
     return text.length > 3_000_000 ? text.slice(0, 3_000_000) : text;
   } catch {
     return null;
+  }
+}
+
+/** A PDF file, or null if it isn't one / is too big / fails twice (slow sites get one retry). */
+async function getPdf(url: string, attempt = 1): Promise<Uint8Array | null> {
+  try {
+    const res = await fetch(url, { headers: { 'User-Agent': UA, Accept: 'application/pdf' }, redirect: 'follow', signal: AbortSignal.timeout(45_000) });
+    if (!res.ok || Number(res.headers.get('content-length') ?? 0) > MAX_PDF_BYTES) return null;
+    const buf = new Uint8Array(await res.arrayBuffer());
+    return buf.length <= MAX_PDF_BYTES && String.fromCharCode(...buf.slice(0, 5)) === '%PDF-' ? buf : null;
+  } catch {
+    return attempt < 2 ? getPdf(url, attempt + 1) : null;
   }
 }
 
@@ -44,8 +57,18 @@ export interface CrawlResult { prices: BeerPrice[]; happyHours: HappyHour[]; sit
  * currency 'USD' (San Diego): "$5 drafts" style, English.
  * currency 'EUR' (Athens): "Mythos 500ml 4,50€" style, Greek or English; every price is stored in euros.
  */
-export async function crawlVenueSites(venues: BeerVenue[], log: (m: string) => void = () => {}, concurrency = 8, currency: 'USD' | 'EUR' = 'USD'): Promise<CrawlResult> {
+export interface CrawlOptions {
+  /** Read PDF menus linked from the site (text inside the PDF). Default on. */
+  pdfs?: boolean;
+  /** OCR budget for PDFs that are only pictures (pages per run; 0 = no OCR). Default 30. */
+  ocrPages?: number;
+}
+
+export async function crawlVenueSites(venues: BeerVenue[], log: (m: string) => void = () => {}, concurrency = 8, currency: 'USD' | 'EUR' = 'USD', opts: CrawlOptions = {}): Promise<CrawlResult> {
   const eur = currency === 'EUR';
+  const readPdfs = opts.pdfs ?? true;
+  const ocr = readPdfs && (opts.ocrPages ?? 30) > 0 ? new OcrSession(eur ? 'eng+ell' : 'eng', opts.ocrPages ?? 30) : null;
+  let pdfsRead = 0, pdfsOcr = 0;
   const hhOf = eur ? extractEuroHappyHour : extractHappyHour;
   const menuPrices = (text: string) => (eur ? parseEuroPrices(text, false) : parsePrices(text, false));
   const tag = eur ? { currency: 'EUR' as const } : {};
@@ -63,16 +86,34 @@ export async function crawlVenueSites(venues: BeerVenue[], log: (m: string) => v
       const v = targets[i++];
       const home = await get(v.website!);
       if (!home) continue;
-      readIds.push(v.id);
       const pages: [string, string][] = [[v.website!, home]];
       for (const url of candidateLinks(home, v.website!)) {
         const html = await get(url);
         if (html) pages.push([url, html]);
       }
+      // Web pages, plus PDF menus linked from them (text, or OCR when the PDF is only pictures).
+      const docs: { url: string; text: string; menu: boolean; menuDate?: string }[] = pages.map(([url, html]) => {
+        const text = htmlToText(html);
+        return { url, text, menu: /menu|drink|beer|tap|κατ[αά]λογ|μεν[οού]|ποτ[αά]|μπ[υύ]ρ/iu.test(decodeURI(url)) || /\bon tap\b|draft list|beer list|κατάλογος|μπύρες|βαρέλι/iu.test(text) };
+      });
+      // A menu PDF that fails to download today: keep this place's previous prices rather than wiping them.
+      let pdfFailed = false;
+      if (readPdfs) {
+        for (const url of [...new Set(pages.flatMap(([u, h]) => pdfLinks(h, u)))].slice(0, 3)) {
+          const buf = await getPdf(url);
+          if (!buf) { pdfFailed = true; continue; }
+          const t = await pdfToText(buf, ocr).catch(() => null);
+          if (!t?.text.trim()) continue;
+          pdfsRead++;
+          if (t.ocr) pdfsOcr++;
+          docs.push({ url, text: t.text, menu: true, menuDate: t.menuDate });
+        }
+      }
+      if (!pdfFailed) readIds.push(v.id);
       let found = false;
       const seen = new Set<string>();
-      for (const [url, html] of pages) {
-        const text = htmlToText(html);
+      for (const { url, text, menu, menuDate } of docs) {
+        const dated = menuDate ? { menuDate } : {};
         const { windows, prices: hhPrices } = hhOf(text);
         for (const w of windows) {
           const key = `${w.days.join()}|${w.start}|${w.end}`;
@@ -88,16 +129,16 @@ export async function crawlVenueSites(venues: BeerVenue[], log: (m: string) => v
           prices.push({
             id, venueId: v.id, item: p.item, price: p.price, ...tag, size: p.size, kind: 'happy_hour',
             days: window?.days, start: window?.start, end: window?.end,
-            source: 'website', sourceUrl: url, snippet: p.text.slice(0, 200), reportedAt: now,
+            source: 'website', sourceUrl: url, snippet: p.text.slice(0, 200), reportedAt: now, ...dated,
           });
           found = true;
         }
         // Regular beer prices on drink menus (only on pages that look like menus, to avoid noise).
-        if (/menu|drink|beer|tap|κατ[αά]λογ|μεν[οού]|ποτ[αά]|μπ[υύ]ρ/iu.test(decodeURI(url)) || /\bon tap\b|draft list|beer list|κατάλογος|μπύρες|βαρέλι/iu.test(text)) {
+        if (menu) {
           for (const p of menuPrices(text).slice(0, 10)) {
             const id = `web:${v.id}:reg:${p.item}:${p.price}`;
             if (prices.some((x) => x.id === id || (x.venueId === v.id && x.price === p.price && x.item === p.item))) continue;
-            prices.push({ id, venueId: v.id, item: p.item, price: p.price, ...tag, size: p.size, kind: 'regular', source: 'website', sourceUrl: url, snippet: p.text.slice(0, 200), reportedAt: now });
+            prices.push({ id, venueId: v.id, item: p.item, price: p.price, ...tag, size: p.size, kind: 'regular', source: 'website', sourceUrl: url, snippet: p.text.slice(0, 200), reportedAt: now, ...dated });
             found = true;
           }
         }
@@ -105,7 +146,11 @@ export async function crawlVenueSites(venues: BeerVenue[], log: (m: string) => v
       if (found) withInfo++;
     }
   }
-  await Promise.all(Array.from({ length: concurrency }, worker));
-  log(`checked ${targets.length} websites, found info on ${withInfo}: ${happyHours.length} happy hours, ${prices.length} prices`);
+  try {
+    await Promise.all(Array.from({ length: concurrency }, worker));
+  } finally {
+    await ocr?.close();
+  }
+  log(`checked ${targets.length} websites (${pdfsRead} PDF menus, ${pdfsOcr} read with OCR), found info on ${withInfo}: ${happyHours.length} happy hours, ${prices.length} prices`);
   return { prices, happyHours, sitesTried: targets.length, sitesWithInfo: withInfo, readIds };
 }

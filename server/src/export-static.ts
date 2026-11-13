@@ -4,6 +4,7 @@
  *   GIB_DB=/tmp/snap.db PREV_URL=https://<github-owner>.github.io/Gibstaapp npx tsx src/export-static.ts ../web/dist/data
  *
  * REFRESH=athens: only the Athens beer refresh (euros); weed and San Diego beer keep the data they have.
+ * REFRESH=sandiego: weed + San Diego beer (dollars) only; Athens keeps the data it has.
  * SKIP_REFRESH=1: no refreshes at all, just merge what's there (deploys after a code change).
  *
  * 1. Loads the previous snapshot from the live site, so a source that fails today keeps yesterday's data.
@@ -109,10 +110,11 @@ const weedBefore = repo.refreshStatus(), beerBefore = beerRepo.status();
 console.log('[export] sources:', Object.entries(config.sources).filter(([, on]) => on).map(([k]) => k).join(', '));
 // SKIP_REFRESH=1: just export what's in the database (for testing).
 const athensOnly = process.env.REFRESH === 'athens';
+const sanDiegoOnly = process.env.REFRESH === 'sandiego';
 const [weedRun] = process.env.SKIP_REFRESH || athensOnly ? [repo.refreshStatus()] : await Promise.all([
   refreshAll(),
   // San Diego ($) and Athens (€) are separate refreshes; one failing doesn't stop the other.
-  refreshBeer({ forceOsm: true }).catch((e) => console.error('[export] beer', e)),
+  refreshBeer({ forceOsm: true, ...(sanDiegoOnly ? { region: 'us' as const } : {}) }).catch((e) => console.error('[export] beer', e)),
 ]);
 if (athensOnly && !process.env.SKIP_REFRESH) {
   console.log('[export] Athens-only beer refresh');

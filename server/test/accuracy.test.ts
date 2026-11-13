@@ -21,6 +21,12 @@ describe('beer prices: things that are not a beer price', () => {
     expect(items('Make it spicy +$1 Absinthe spritz +$2 Try a Draft Cocktail Flight', true)).toEqual([]);
     expect(items('Taco Tuesday • 2 Tacos + Mexican Lager $14 10:00 AM')).toEqual([]);
   });
+  it('food combos on dollar menus (real PDF snippet)', () => {
+    expect(items('Wednesday: ½ off wings Thursday: Nachos & a Beer $14 PLEASE PLACE YOUR ORDER', true)).toEqual([]);
+    expect(items('Pizza and a Pint $17', true)).toEqual([]);
+    // A heading with '+' isn't an add-on. (Coors Light is skipped as too close to 'SELTZER': a missed price, never a wrong one.)
+    expect(items('BEER + SELTZER + NON-ALCOHOLIC Coors Light $8 Corona $10 Peroni $10')).toEqual(['Corona $10']);
+  });
   it('a price that belongs to the next thing, or only applies until a time', () => {
     expect(items('$24 Pitchers on select drafts $5 Mimosas')).toEqual([]);
     expect(items('ALL beers are just $6 until 6pm & VINYL SLICES')).toEqual([]);
@@ -118,6 +124,10 @@ describe('euro prices (Athens bar websites)', () => {
     expect(eu('Burger & beer 14€')).toEqual([]);
     expect(eu('Draft Beers 330ml / 500ml Nymfi (5 Hops Lager - Greece) 4€ / 5€')).toEqual([]);
     expect(eu('Ginger beer 4€')).toEqual([]);
+    // From real Athens PDFs: a wine list ("Κτήμα Avantis Νύμφη", an Assyrtiko named Corona) and a lone style word.
+    expect(eu('Λευκά κρασιά  Κτήμα Avantis Νύμφη  5,50 €  Ασύρτικο Corona  6,50 €')).toEqual([]);
+    expect(eu('Complexity in aromas and flavors. Ale  330ml  €7.50')).toEqual([]);
+    expect(eu('House lager  500ml  €4.00')).toEqual(['House lager | 500ml | €4']);
     // From Barrett's real menu: a whiskey called "IPA Edition", under the whiskey heading.
     expect(eu('whiskey Jameson Irish Whiskey 8€ Jameson Black Barrel 10€ Jameson IPA Edition 10€')).toEqual([]);
     expect(eu('(3.42)\n\n440ml Can\n8.70 EUR')).toEqual([]);

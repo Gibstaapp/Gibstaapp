@@ -21,6 +21,8 @@ Both modes have a **🧭 Compass** that points at the place you picked, plus lis
   Greek public holidays. Athens bars are in the daily data. Athens has its own daily refresh (euros, 7 AM Athens time), separate from San Diego's
   (dollars, 7 AM Pacific). Euro prices come from the bars' own websites and from menus we checked by hand (`server/beer-seed.json`).
 - Results never come from more than 100 miles from your home area code, so San Diego and Athens never mix.
+- Both cities' refreshes also read the bars' PDF menus, with OCR for menus that are only pictures (Greek + English in Athens).
+  Each price shows the menu's date. Refresh one city by hand: Actions → Website → Run workflow → choose the city.
 
 Shared by both modes:
 

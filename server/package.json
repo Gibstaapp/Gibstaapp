@@ -11,16 +11,21 @@
     "typecheck": "tsc -p .",
     "beer": "tsx src/cli-beer.ts",
     "athens": "tsx src/cli-athens.ts",
+    "beer:athens": "tsx src/cli-beer.ts --region europe",
+    "beer:sandiego": "tsx src/cli-beer.ts --region us",
     "publish-data": "tsx src/publish.ts"
   },
   "dependencies": {
     "@fastify/cors": "^11.4.2",
     "@fastify/static": "^10.1.10",
     "@gib/shared": "*",
+    "@napi-rs/canvas": "^0.1.65",
     "fastify": "^5.12.8",
     "node-cron": "^4.6.0",
     "opening_hours": "^3.15.0",
-    "playwright": "^1.65.0"
+    "pdfjs-dist": "^4.10.38",
+    "playwright": "^1.65.0",
+    "tesseract.js": "^5.1.1"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",

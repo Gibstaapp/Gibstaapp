@@ -26,6 +26,18 @@ export function ouncesOf(size?: string): number {
 /** Price scaled to a 16 oz pint. */
 export const perPint = (p: Pick<BeerPrice, 'price' | 'size'>) => (p.price * 16) / ouncesOf(p.size);
 
+/** The same price for the same size at one place, found twice (hand-checked and read off their PDF): keep the most trusted. */
+const TRUST: Record<BeerPrice['source'], number> = { team: 0, seed: 1, user: 2, website: 3 };
+export function dedupePrices(ps: BeerPrice[]): BeerPrice[] {
+  const best = new Map<string, BeerPrice>();
+  for (const p of ps) {
+    const key = `${p.price}|${p.size ?? ''}|${p.kind}|${p.start ?? ''}`;
+    const cur = best.get(key);
+    if (!cur || TRUST[p.source] < TRUST[cur.source]) best.set(key, p);
+  }
+  return [...best.values()];
+}
+
 export function priceAppliesNow(p: BeerPrice, now: Date): boolean {
   if (p.kind === 'regular' && !p.start) return p.days?.length ? windowActive(p, now) : true;
   return windowActive(p, now);
@@ -60,7 +72,7 @@ export function rankVenues(
 
     // Prices must be in the place's own currency (Athens = euros): a '$' read off a Greek website is dropped.
     const currency = regionAt(v).currency;
-    const vp = (byVenue.get(v.id) ?? []).filter((p) => (p.currency ?? 'USD') === currency).sort((a, b) => perPint(a) - perPint(b));
+    const vp = dedupePrices((byVenue.get(v.id) ?? []).filter((p) => (p.currency ?? 'USD') === currency)).sort((a, b) => perPint(a) - perPint(b));
     const hh = hhByVenue.get(v.id) ?? [];
     const applicable = vp.filter((p) => priceAppliesNow(p, localNow));
     const best = applicable[0] ? { ...applicable[0], label: LABEL[applicable[0].kind] } : null;

@@ -26,6 +26,11 @@ on:
         description: 'Refresh prices too (takes ~15-30 min)'
         type: boolean
         default: true
+      city:
+        description: 'Which city to refresh (each has its own refresh)'
+        type: choice
+        options: [both, san-diego, athens]
+        default: both
 
 permissions:
   contents: read
@@ -76,8 +81,10 @@ jobs:
       - name: Decide whether to refresh prices
         id: mode
         run: |
-          if [ "${{ github.event.schedule }}" = "0 5 * * *" ]; then
+          if [ "${{ github.event.schedule }}" = "0 5 * * *" ] || { [ "${{ github.event.inputs.refresh }}" = "true" ] && [ "${{ github.event.inputs.city }}" = "athens" ]; }; then
             echo "refresh=athens" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event.inputs.refresh }}" = "true" ] && [ "${{ github.event.inputs.city }}" = "san-diego" ]; then
+            echo "refresh=sandiego" >> "$GITHUB_OUTPUT"
           elif [ "${{ github.event.schedule }}" = "0 13 * * *" ] || [ "${{ github.event.inputs.refresh }}" = "true" ]; then
             echo "refresh=true" >> "$GITHUB_OUTPUT"
           elif curl -sf "$SITE_URL/data/weed.json" -o /dev/null || curl -sf "$PC_DATA_URL/weed.json" -o /dev/null; then
@@ -107,17 +114,18 @@ jobs:
           PC_DATA_URL: ${{ env.PC_DATA_URL }}
 
       - name: Install browser for scraping
-        if: steps.mode.outputs.refresh == 'true'
+        if: steps.mode.outputs.refresh == 'true' || steps.mode.outputs.refresh == 'sandiego'
         run: npx playwright install --with-deps chromium
 
       - name: Refresh prices and export data
-        if: steps.mode.outputs.refresh == 'true'
+        if: steps.mode.outputs.refresh == 'true' || steps.mode.outputs.refresh == 'sandiego'
         working-directory: server
         run: |
           mkdir -p data
           echo '{ "sources": { "sample": false, "dutchie": true, "jane": true, "weedmaps": true, "eaze": true }, "tunnel": false, "sourceTimeoutMs": 900000 }' > data/config.json
           npx tsx src/export-static.ts ../web/dist/data
         env:
+          REFRESH: ${{ steps.mode.outputs.refresh == 'sandiego' && 'sandiego' || '' }}
           GIB_DB: ${{ runner.temp }}/snapshot.db
           PREV_URL: ${{ env.SITE_URL }}
           PC_DATA_URL: ${{ env.PC_DATA_URL }}
