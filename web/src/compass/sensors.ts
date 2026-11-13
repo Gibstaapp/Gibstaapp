@@ -80,17 +80,17 @@ export function useHeading(): { state: HeadingState; requestPermission: () => Pr
 
 export interface Fix { lat: number; lng: number; accuracy?: number; source: 'gps' | 'home' }
 
-/** Live GPS position, falling back to the home ZIP. */
+/** Live GPS position, falling back to the home area code. */
 export function useLocation(home: { lat: number; lng: number }): { fix: Fix; error: string | null; retry: () => void } {
   const [fix, setFix] = useState<Fix>({ ...home, source: 'home' });
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     if (!navigator.geolocation) { setError('This browser has no location access.'); return; }
-    if (!window.isSecureContext) { setError('Location needs the https link. Using your home ZIP.'); return; }
+    if (!window.isSecureContext) { setError('Location needs the https link. Using your home area.'); return; }
     const id = navigator.geolocation.watchPosition(
       (p) => { setError(null); setFix({ lat: p.coords.latitude, lng: p.coords.longitude, accuracy: p.coords.accuracy, source: 'gps' }); },
-      (e) => setError(e.code === e.PERMISSION_DENIED ? 'Location is blocked. Using your home ZIP.' : 'Can\'t get a GPS fix. Using your home ZIP.'),
+      (e) => setError(e.code === e.PERMISSION_DENIED ? 'Location is blocked. Using your home area.' : 'Can\'t get a GPS fix. Using your home area.'),
       { enableHighAccuracy: true, maximumAge: 10_000, timeout: 20_000 },
     );
     return () => navigator.geolocation.clearWatch(id);

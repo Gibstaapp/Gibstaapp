@@ -1,12 +1,14 @@
-import { BADGE_TIERS, EXPLORER_TIERS, FIRST_BADGE_VISITS, earnedBadges, placeBadge, visitsToNext, type BadgeSide } from '@gib/shared';
+import { fmtDistance, BADGE_TIERS, EXPLORER_TIERS, FIRST_BADGE_VISITS, earnedBadges, placeBadge, visitsToNext, type BadgeSide } from '@gib/shared';
 import { CHECKIN_MILES, useVisits } from '../badges.ts';
 import { ACCENT } from '../components/Place.tsx';
+import { useRegion } from '../region.ts';
 
 const SIDE_TITLE: Record<BadgeSide, string> = { weed: '🌿 Weed', beer: '🍺 Beer' };
 
 /** Trophy shelf: badges earned, places in progress, and what there is to win. */
 export default function BadgesPage({ side }: { side: BadgeSide }) {
   const { log } = useVisits();
+  const { units } = useRegion();
   const earned = earnedBadges(log);
   const order: BadgeSide[] = side === 'weed' ? ['weed', 'beer'] : ['beer', 'weed'];
 
@@ -15,7 +17,7 @@ export default function BadgesPage({ side }: { side: BadgeSide }) {
       <section>
         <h2 className="text-lg font-semibold">Your badges</h2>
         <p className="text-xs text-zinc-400 mt-1">
-          Check in on the compass when you're within {CHECKIN_MILES} mi of a place. One check-in per place per day.
+          Check in on the compass when you're within {fmtDistance(CHECKIN_MILES, units)} of a place. One check-in per place per day.
           Go back {FIRST_BADGE_VISITS} times and the first badge is yours.
         </p>
         {earned.length === 0 && (

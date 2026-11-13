@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { BeerPrice, BeerVenue, SourceStatus } from '@gib/shared';
+import type { BeerPrice, BeerVenue, HappyHour, SourceStatus } from '@gib/shared';
 import { beerRepo, repo, type BeerArea } from '../db.ts';
 import { haversineMiles } from '../pricing/engine.ts';
 import { fetchOsmVenues } from './osm.ts';
@@ -17,42 +17,61 @@ export const SEED_FILE = resolve(here, '../../beer-seed.json');
 const OSM_MAX_AGE_MS = 6 * 86400_000;      // places don't change often; Overpass is slow
 const AREA_KEEP_MS = 30 * 86400_000;       // stop refreshing areas nobody has looked at in a month
 const HOME_MILES = 25;
+/** Cities we launched in, refreshed every day next to home (so they load instantly on the website). */
+export const LAUNCH_AREAS = [{ name: 'Athens', lat: 37.9838, lng: 23.7275, miles: 25 }];
 
-const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+// Letters in any alphabet, so Greek names match too.
+const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[^\p{L}\p{N}]/gu, '');
 const at = () => new Date().toISOString();
 const log = (src: string) => (m: string) => console.log(`[beer:${src}] ${m}`);
 
-/** beer-seed.json: hand-entered places + prices (deals we've confirmed in person). */
-export function loadSeed(venues: BeerVenue[]): { venues: BeerVenue[]; prices: BeerPrice[] } {
-  if (!existsSync(SEED_FILE)) return { venues: [], prices: [] };
-  const seed = JSON.parse(readFileSync(SEED_FILE, 'utf8')) as { venues?: any[]; prices?: any[] };
+/** beer-seed.json: hand-entered places, prices and happy hours (confirmed in person, or from the bar's own menu). */
+export function loadSeed(venues: BeerVenue[], file = SEED_FILE): { venues: BeerVenue[]; prices: BeerPrice[]; happyHours: HappyHour[] } {
+  if (!existsSync(file)) return { venues: [], prices: [], happyHours: [] };
+  const seed = JSON.parse(readFileSync(file, 'utf8')) as { venues?: any[]; prices?: any[]; happyHours?: any[] };
   const newVenues: BeerVenue[] = (seed.venues ?? []).filter((v) => !v.example).map((v) => ({
     id: v.id ?? `seed:${norm(v.name)}`, name: v.name, kind: v.kind ?? 'bar', lat: v.lat, lng: v.lng,
     address: v.address, website: v.website, openingHours: v.openingHours, source: 'seed' as const,
   }));
   const all = [...venues, ...newVenues];
+  const find = (p: any): BeerVenue | undefined => {
+    let venue = p.venueId ? all.find((v) => v.id === p.venueId) : undefined;
+    if (!venue && p.name) {
+      // Same name, and within 1 mile of 'near' when given (so a namesake across town never matches).
+      const cands = all.filter((v) => norm(v.name) === norm(p.name) && (!p.near || haversineMiles(v.lat, v.lng, p.near[0], p.near[1]) < 1));
+      venue = p.near ? cands.sort((a, b) => haversineMiles(a.lat, a.lng, p.near[0], p.near[1]) - haversineMiles(b.lat, b.lng, p.near[0], p.near[1]))[0] : cands[0];
+    }
+    if (!venue) console.warn(`[beer seed] no place matches "${p.name ?? p.venueId}"`);
+    return venue;
+  };
   const prices: BeerPrice[] = [];
   for (const [i, p] of (seed.prices ?? []).entries()) {
     if (p.example) continue;
-    let venue = p.venueId ? all.find((v) => v.id === p.venueId) : undefined;
-    if (!venue && p.name) {
-      const cands = all.filter((v) => norm(v.name) === norm(p.name));
-      venue = p.near ? cands.sort((a, b) => haversineMiles(a.lat, a.lng, p.near[0], p.near[1]) - haversineMiles(b.lat, b.lng, p.near[0], p.near[1]))[0] : cands[0];
-    }
-    if (!venue) { console.warn(`[beer seed] no place matches "${p.name ?? p.venueId}"`); continue; }
+    const venue = find(p);
+    if (!venue) continue;
     prices.push({
       id: `seed:${i}:${venue.id}`, venueId: venue.id, item: p.item, price: p.price, size: p.size, kind: p.kind ?? 'regular',
+      ...(p.currency === 'EUR' ? { currency: 'EUR' as const } : {}),
       days: p.days, start: p.start, end: p.end,
-      source: p.source === 'team' ? 'team' : 'seed', snippet: p.note, reportedAt: p.date ?? at(),
+      source: p.source === 'team' ? 'team' : 'seed', snippet: p.note, sourceUrl: p.url,
+      // A bare date ("2026-11-13") means that day anywhere: noon UTC, so no time zone shows it as the day before.
+      reportedAt: typeof p.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(p.date) ? `${p.date}T12:00:00.000Z` : p.date ?? at(),
     });
   }
-  return { venues: newVenues, prices };
+  const happyHours: HappyHour[] = [];
+  for (const h of seed.happyHours ?? []) {
+    if (h.example) continue;
+    const venue = find(h);
+    if (!venue || !h.start || !h.end) continue;
+    happyHours.push({ venueId: venue.id, days: h.days ?? [], start: h.start, end: h.end, text: h.note ?? '', source: 'seed', sourceUrl: h.url });
+  }
+  return { venues: newVenues, prices, happyHours };
 }
 
 function applySeed() {
   const seed = loadSeed(beerRepo.venues());
   beerRepo.upsertVenues(seed.venues);
-  beerRepo.replaceFromSource(['seed', 'team'], seed.prices, []);
+  beerRepo.replaceFromSource(['seed', 'team'], seed.prices, seed.happyHours);
 }
 
 const inArea = (a: BeerArea, v: { lat: number; lng: number }) => haversineMiles(a.lat, a.lng, v.lat, v.lng) <= a.miles;
@@ -115,6 +134,11 @@ export function refreshBeer(opts: { forceOsm?: boolean } = {}): Promise<SourceSt
     let areas = beerRepo.areas().filter((a) => Date.now() - new Date(a.usedAt).getTime() < AREA_KEEP_MS);
     if (!areas.some((a) => haversineMiles(a.lat, a.lng, home.lat, home.lng) < 3 && a.miles >= HOME_MILES - 1)) {
       areas.unshift({ lat: home.lat, lng: home.lng, miles: HOME_MILES, fetchedAt: new Date(0).toISOString(), usedAt: at() });
+    }
+    for (const c of LAUNCH_AREAS) {
+      const have = areas.find((a) => haversineMiles(a.lat, a.lng, c.lat, c.lng) < 3 && a.miles >= c.miles - 1);
+      if (have) have.usedAt = at();
+      else areas.push({ lat: c.lat, lng: c.lng, miles: c.miles, fetchedAt: new Date(0).toISOString(), usedAt: at() });
     }
 
     // 1. Places (OpenStreetMap), weekly per area.

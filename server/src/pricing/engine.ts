@@ -138,6 +138,8 @@ export function rankItems(
     const item = priceItem(p, store, dealsByStore.get(store.id) ?? [], profile, { mode: q.mode, now, open }, ov);
     if (!item) continue;
     if (q.maxMiles != null && q.mode === 'pickup' && item.distanceMiles > q.maxMiles) continue;
+    // Delivery zones were worked out for San Diego: a store this far from home doesn't deliver to you.
+    if (q.mode === 'delivery' && item.distanceMiles > DELIVERY_MAX_MILES) continue;
     out.push(item);
   }
   // Items with no weight/mg ("/ea") can't be compared per gram: rank them after everything that can.
@@ -148,6 +150,7 @@ export function rankItems(
   return q.limit ? ranked.slice(0, q.limit) : ranked;
 }
 
+export const DELIVERY_MAX_MILES = 60;
 export const CLOSER_MIN_MILES = 5;
 export const CLOSER_MAX_EXTRA = 10;
 export const CLOSER_MAX_PICKS = 5;

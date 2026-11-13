@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { UserProfile } from '@gib/shared';
+import { AREAS, KM_PER_MI, REGIONS, regionOf, type HomeArea, type RegionId, type UserProfile } from '@gib/shared';
 import { api } from '../api.ts';
 
 export function Toggle({ label, hint, checked, onChange }: { label: string; hint?: string; checked: boolean; onChange: (v: boolean) => void }) {
@@ -17,28 +17,68 @@ export function Toggle({ label, hint, checked, onChange }: { label: string; hint
   );
 }
 
-/** ZIP, radius, and discount eligibility: shared by onboarding and settings. */
+const RADIUS_MI = [5, 10, 15, 20, 30, 50], RADIUS_KM = [5, 10, 20, 30, 50, 80];
+
+/** Area code (U.S. / Europe tabs), radius, and discount eligibility: shared by onboarding and settings. */
 export default function ProfileForm({ value, onChange }: { value: UserProfile; onChange: (p: UserProfile) => void }) {
-  const [zips, setZips] = useState<Record<string, { area: string }>>({});
-  useEffect(() => { api.zips().then(setZips).catch(() => {}); }, []);
+  const [areas, setAreas] = useState<Record<string, HomeArea>>(AREAS);
+  useEffect(() => { api.zips().then((a) => { if (a && Object.keys(a).length) setAreas(a); }).catch(() => {}); }, []);
   const set = <K extends keyof UserProfile>(k: K, v: UserProfile[K]) => onChange({ ...value, [k]: v });
+  const [tab, setTab] = useState<RegionId>(() => regionOf(value.homeZip).id);
+  const region = REGIONS[tab];
+
+  // Codes in this tab, grouped by city / municipality (San Diego County; Athens, Piraeus, Glyfada…).
+  const groups = new Map<string, [string, HomeArea][]>();
+  for (const [code, a] of Object.entries(areas).filter(([, a]) => (a.region ?? 'us') === tab).sort(([x], [y]) => x.localeCompare(y))) {
+    const g = tab === 'us' ? 'San Diego County' : a.city;
+    (groups.get(g) ?? groups.set(g, []).get(g)!).push([code, a]);
+  }
+  const groupNames = [...groups.keys()].sort((a, b) => (a === 'Athens' ? -1 : b === 'Athens' ? 1 : a.localeCompare(b)));
+  const inTab = (areas[value.homeZip]?.region ?? 'us') === tab;
+  const pickTab = (t: RegionId) => {
+    setTab(t);
+    // Switching tabs picks that region's first code, so home and units always match what you see.
+    if ((areas[value.homeZip]?.region ?? 'us') !== t) {
+      const first = Object.entries(areas).filter(([, a]) => (a.region ?? 'us') === t).sort(([x], [y]) => x.localeCompare(y))[0];
+      if (first) onChange({ ...value, homeZip: first[0], lat: first[1].lat, lng: first[1].lng });
+    }
+  };
+  const radius = (REGIONS[tab].units === 'km' ? RADIUS_KM.map((k) => [k / KM_PER_MI, `${k} km`] as const) : RADIUS_MI.map((m) => [m, `${m} miles${m === 30 ? ' (all of SD)' : ''}`] as const));
+  const radiusValue = radius.reduce((best, [m]) => (Math.abs(m - value.radiusMiles) < Math.abs(best - value.radiusMiles) ? m : best), radius[0][0]);
 
   return (
     <div>
-      <div className="grid grid-cols-2 gap-3 py-3 border-b border-zinc-800">
-        <label className="text-sm">
-          <span className="block text-zinc-400 mb-1">Home ZIP</span>
-          <select value={value.homeZip} onChange={(e) => set('homeZip', e.target.value)} className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-2 py-2">
-            {Object.entries(zips).sort().map(([z, info]) => <option key={z} value={z}>{z} · {info.area}</option>)}
-            {!zips[value.homeZip] && <option value={value.homeZip}>{value.homeZip}</option>}
-          </select>
-        </label>
-        <label className="text-sm">
-          <span className="block text-zinc-400 mb-1">Search radius</span>
-          <select value={value.radiusMiles} onChange={(e) => set('radiusMiles', Number(e.target.value))} className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-2 py-2">
-            {[5, 10, 15, 20, 30, 50].map((m) => <option key={m} value={m}>{m} miles{m === 30 ? ' (all of SD)' : ''}</option>)}
-          </select>
-        </label>
+      <div className="py-3 border-b border-zinc-800">
+        <div className="flex items-center justify-between gap-2 mb-2 text-sm">
+          <span className="text-zinc-400">Area code</span>
+          <div className="inline-flex rounded-lg overflow-hidden border border-zinc-700" role="tablist">
+            {(['us', 'europe'] as const).map((t) => (
+              <button key={t} type="button" role="tab" aria-selected={tab === t} onClick={() => pickTab(t)}
+                className={`px-3 py-1 ${tab === t ? 'bg-zinc-200 text-black font-semibold' : 'text-zinc-300'}`}>{REGIONS[t].tab}</button>
+            ))}
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <label className="text-sm">
+            <span className="block text-zinc-400 mb-1">Home {region.codeName}</span>
+            <select value={inTab ? value.homeZip : ''}
+              onChange={(e) => { const a = areas[e.target.value]; onChange({ ...value, homeZip: e.target.value, ...(a ? { lat: a.lat, lng: a.lng } : {}) }); }}
+              className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-2 py-2">
+              {!inTab && <option value="" disabled>Pick a {region.city} {region.codeName}</option>}
+              {groupNames.map((g) => (
+                <optgroup key={g} label={g}>
+                  {groups.get(g)!.map(([code, a]) => <option key={code} value={code}>{code} · {a.area}</option>)}
+                </optgroup>
+              ))}
+            </select>
+          </label>
+          <label className="text-sm">
+            <span className="block text-zinc-400 mb-1">Search radius</span>
+            <select value={radiusValue} onChange={(e) => set('radiusMiles', Number(e.target.value))} className="w-full bg-zinc-900 border border-zinc-700 rounded-lg px-2 py-2">
+              {radius.map(([m, label]) => <option key={m} value={m}>{label}</option>)}
+            </select>
+          </label>
+        </div>
       </div>
       <Toggle label="I'm a veteran" hint="Most shops: 10–20% off with military ID" checked={value.veteran} onChange={(v) => set('veteran', v)} />
       <Toggle label="I'm a senior" hint="Usually 60+ or 65+ with ID" checked={value.senior} onChange={(v) => set('senior', v)} />

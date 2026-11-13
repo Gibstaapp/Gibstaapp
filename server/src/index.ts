@@ -14,7 +14,8 @@ import { effectiveStore } from './pricing/engine.ts';
 import { CITY_TAXES, CA_EXCISE_RATE, DEFAULT_CITY_TAX } from './pricing/taxes.ts';
 import { sendMorningDigest } from './notify.ts';
 import { morningJob, startScheduler } from './scheduler.ts';
-import { SD_ZIPS } from './zips.ts';
+import { AREAS } from './zips.ts';
+import { regionOf } from '@gib/shared';
 import { getPublicUrl, startTunnel } from './tunnel.ts';
 import './sources/register.ts';
 import { randomUUID } from 'node:crypto';
@@ -57,6 +58,7 @@ app.post('/api/auth', async (req, reply) => {
 app.post('/api/items', async (req) => {
   const b = (req.body ?? {}) as { category?: Category; mode?: Mode; maxMiles?: number; search?: string; openNow?: boolean; limit?: number; profile?: Partial<PersonalProfile> };
   const profile = profileFor(b.profile);
+  if (!regionOf(profile.homeZip).weedLegal) return []; // no legal shops to show there
   return query({
     category: b.category,
     mode: b.mode ?? 'pickup',
@@ -88,8 +90,8 @@ app.put('/api/profile', async (req, reply) => {
   const body = req.body as Partial<UserProfile>;
   const next: UserProfile = { ...prev, ...body };
   if (body.homeZip && body.homeZip !== prev.homeZip) {
-    const z = SD_ZIPS[body.homeZip];
-    if (!z) return reply.code(400).send({ error: `Unknown ZIP ${body.homeZip}. Supported: San Diego County ZIPs.` });
+    const z = AREAS[body.homeZip];
+    if (!z) return reply.code(400).send({ error: `Unknown area code ${body.homeZip}. Pick one from the list.` });
     next.lat = z.lat;
     next.lng = z.lng;
   }
@@ -108,7 +110,7 @@ app.post('/api/profile/visited', async (req) => {
   return next;
 });
 
-app.get('/api/zips', async () => SD_ZIPS);
+app.get('/api/zips', async () => AREAS);
 app.get('/api/public-url', async () => ({ url: getPublicUrl() }));
 
 app.get('/api/status', async () => ({ ...repo.refreshStatus(), running: isRefreshing() }));
@@ -139,7 +141,7 @@ app.post('/api/beer/venues', async (req) => {
   // Open/closed and happy hours use the phone's local time (matters when traveling).
   const shiftMin = Number.isFinite(q.tzOffset) ? new Date().getTimezoneOffset() - q.tzOffset! : 0;
   const now = new Date(Date.now() + shiftMin * 60_000);
-  const venues = rankVenues({ ...q, lat, lng, limit: Math.min(q.limit ?? 150, 400) }, beerRepo.venues(), beerRepo.prices(), beerRepo.happyHours(), now);
+  const venues = rankVenues({ ...q, lat, lng, limit: Math.min(q.limit ?? 150, 400) }, beerRepo.venues(), beerRepo.prices(), beerRepo.happyHours(), now, new Date());
   return { venues, loading };
 });
 app.get('/api/beer/status', async () => ({ ...beerRepo.status(), running: isBeerRefreshing(), venues: beerRepo.venues().length, areas: beerRepo.areas().length }));
@@ -161,6 +163,7 @@ app.post('/api/beer/report', async (req, reply) => {
   const hhmm = /^\d{2}:\d{2}$/;
   const p: BeerPrice = {
     id: `user:${randomUUID()}`, venueId: b.venueId, item: b.item.trim().slice(0, 60), price: Math.round(price * 100) / 100,
+    ...(b.currency === 'EUR' ? { currency: 'EUR' as const } : {}),
     size: b.size?.trim().slice(0, 20) || undefined,
     kind: (['regular', 'happy_hour', 'special'] as const).includes(b.kind) ? b.kind : 'regular',
     days: Array.isArray(b.days) ? b.days.filter((d) => Number.isInteger(d) && d >= 0 && d <= 6) : undefined,

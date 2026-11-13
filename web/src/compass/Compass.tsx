@@ -1,5 +1,6 @@
 import { useRef, useState, type ReactNode } from 'react';
-import { dayKey, placeBadge, visitsToNext, type Badge } from '@gib/shared';
+import { dayKey, fmtDistance, fmtNear, placeBadge, visitsToNext, type Badge } from '@gib/shared';
+import { useRegion } from '../region.ts';
 import { haversine } from '../geo.ts';
 import { bearing, directionsUrl, shortestArc, useHeading, type Fix } from './sensors.ts';
 import Heat, { closeness, heatLabel } from './Heat.tsx';
@@ -22,7 +23,6 @@ export interface CompassTarget {
 
 const CARD = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
 const cardinal = (d: number) => CARD[Math.round(d / 45) % 8];
-const fmtMiles = (mi: number) => (mi < 0.1 ? `${Math.round(mi * 5280)} ft` : `${mi < 10 ? mi.toFixed(1) : Math.round(mi)} mi`);
 
 /** Keeps a rotation continuous (no 359° -> 0° spin) by accumulating shortest-arc steps. */
 function useUnwrapped(angle: number) {
@@ -43,6 +43,7 @@ export default function Compass({ fix, target, side, onPrev, onNext, position, l
   onRetryLocation?: () => void;
 }) {
   const accent = ACCENT[side].hex;
+  const region = useRegion();
   const { state, requestPermission } = useHeading();
   const { log, visit } = useVisits();
   const [party, setParty] = useState<Badge[]>([]);
@@ -64,7 +65,7 @@ export default function Compass({ fix, target, side, onPrev, onNext, position, l
   const next = visitsToNext(side, visits);
   const checkInHint = doneToday ? 'Checked in today. Come back tomorrow for the next one.'
     : fix.source !== 'gps' ? 'Turn on location to check in when you get there.'
-      : near ? 'You made it! Tap to count this visit.' : `Get within ${CHECKIN_MILES} mi to check in.`;
+      : near ? 'You made it! Tap to count this visit.' : `Get within ${fmtDistance(CHECKIN_MILES, region.units)} to check in.`;
 
   return (
     <div className="flex flex-col items-center px-4 pt-4 pb-6 gap-4">
@@ -99,7 +100,7 @@ export default function Compass({ fix, target, side, onPrev, onNext, position, l
           <div className="w-[34%] aspect-square rounded-full bg-zinc-950 border border-zinc-700 grid place-items-center text-center">
             {target ? (
               <div>
-                <div className="text-xl font-bold leading-tight">{arrived ? 'Here!' : fmtMiles(dist)}</div>
+                <div className="text-xl font-bold leading-tight">{arrived ? 'Here!' : fmtNear(dist, region.units)}</div>
                 <div className="text-[11px] text-zinc-400">{cardinal(brg)} · {Math.round(brg)}°</div>
               </div>
             ) : <div className="text-xs text-zinc-500">No target</div>}
@@ -123,7 +124,7 @@ export default function Compass({ fix, target, side, onPrev, onNext, position, l
         {state.status === 'live' && <p>Hold your phone flat. Arrow points to the place. Heading {Math.round(heading)}° {cardinal(heading)}.</p>}
         {state.status === 'unavailable' && <p>{state.reason} Arrow is drawn with <b>north at the top</b>.</p>}
         <p>
-          {fix.source === 'gps' ? `📍 Live location${fix.accuracy ? ` (±${Math.round(fix.accuracy * 3.28)} ft)` : ''}` : `🏠 ${locationError ?? 'Using your home ZIP.'}`}
+          {fix.source === 'gps' ? `📍 Live location${fix.accuracy ? ` (±${region.units === 'km' ? `${Math.round(fix.accuracy)} m` : `${Math.round(fix.accuracy * 3.28)} ft`})` : ''}` : `🏠 ${locationError ?? `Using your home ${region.codeName}.`}`}
           {fix.source !== 'gps' && onRetryLocation && <button onClick={onRetryLocation} className="underline ml-1">Try again</button>}
         </p>
       </div>

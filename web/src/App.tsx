@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { UserProfile } from '@gib/shared';
+import { regionOf, type Region, type UserProfile } from '@gib/shared';
+import { RegionContext } from './region.ts';
 import { api, needsServerUrl, AuthError, STATIC } from './api.ts';
 import PasscodeScreen from './pages/PasscodeScreen.tsx';
 import Onboarding from './pages/Onboarding.tsx';
@@ -13,12 +14,29 @@ import { Logo } from './components/Place.tsx';
 
 type AppMode = 'weed' | 'beer';
 
-/** The Weed / Beer switch at the top of every screen. */
-function ModeSwitch({ mode, onChange }: { mode: AppMode; onChange: (m: AppMode) => void }) {
+/** The Weed / Beer switch at the top of every screen. Where weed isn't legal, Weed is greyed out and explains why. */
+function ModeSwitch({ mode, onChange, weedLegal, onWeedBlocked }: { mode: AppMode; onChange: (m: AppMode) => void; weedLegal: boolean; onWeedBlocked: () => void }) {
   return (
     <div className="inline-flex shrink-0 rounded-full bg-zinc-900 border border-zinc-700 p-0.5 text-sm font-semibold">
-      <button onClick={() => onChange('weed')} className={`px-3 py-1 rounded-full ${mode === 'weed' ? 'bg-green-500 text-black' : 'text-zinc-400'}`}>🌿 Weed</button>
+      {weedLegal
+        ? <button onClick={() => onChange('weed')} className={`px-3 py-1 rounded-full ${mode === 'weed' ? 'bg-green-500 text-black' : 'text-zinc-400'}`}>🌿 Weed</button>
+        : <button onClick={onWeedBlocked} aria-label="Weed (not available here)" className="px-3 py-1 rounded-full text-zinc-600 grayscale opacity-60">🌿 Weed</button>}
       <button onClick={() => onChange('beer')} className={`px-3 py-1 rounded-full ${mode === 'beer' ? 'bg-amber-500 text-black' : 'text-zinc-400'}`}>🍺 Beer</button>
+    </div>
+  );
+}
+
+/** Tapped the greyed-out Weed switch somewhere weed isn't legal. */
+function NoWeedHere({ region, onClose }: { region: Region; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 bg-black/75 grid place-items-center p-6" onClick={onClose} role="dialog" aria-label="Weed isn't available here">
+      <div onClick={(e) => e.stopPropagation()} className="gib-pop w-full max-w-xs rounded-3xl border-2 border-zinc-700 bg-zinc-950 p-6 text-center space-y-3">
+        <div className="text-6xl leading-none">😭</div>
+        <h2 className="text-xl font-bold">No weed in {region.city}</h2>
+        <p className="text-sm text-zinc-300">Recreational cannabis isn't legal in Greece, so our compass has nowhere to point. It's in the corner crying into its ouzo.</p>
+        <p className="text-sm text-zinc-400">The beer, on the other hand, is extremely legal. Opa! 🍺</p>
+        <button onClick={onClose} className="w-full rounded-xl py-2.5 font-semibold text-black bg-amber-500">Take me to the beer</button>
+      </div>
     </div>
   );
 }
@@ -34,6 +52,8 @@ export default function App() {
   const setMode = (m: AppMode) => { localStorage.setItem('gib.app', m); setModeState(m); setTab('deals'); window.scrollTo(0, 0); };
   const [needServer, setNeedServer] = useState(needsServerUrl());
   const [needPass, setNeedPass] = useState(false);
+  const [noWeed, setNoWeed] = useState(false);
+  const region = regionOf(profile?.homeZip);
 
   const loadProfile = useCallback(() => {
     setError(null);
@@ -61,31 +81,37 @@ export default function App() {
   if (!profile) return <div className="p-6 text-zinc-400">Loading…</div>;
   if (!profile.onboarded) return <Onboarding profile={profile} onDone={setProfile} />;
 
-  const top = <div className="flex items-center gap-2"><Logo /><ModeSwitch mode={mode} onChange={setMode} /></div>;
+  // Where weed isn't legal the app runs on the beer side (the saved choice comes back when you're home again).
+  const side: AppMode = region.weedLegal ? mode : 'beer';
+  const top = <div className="flex items-center gap-2"><Logo /><ModeSwitch mode={side} onChange={setMode} weedLegal={region.weedLegal} onWeedBlocked={() => setNoWeed(true)} /></div>;
   const plainTop = <div className="px-4 pt-[calc(env(safe-area-inset-top)+0.75rem)]">{top}</div>;
-  const navItems: readonly (readonly [Tab, string, string])[] = mode === 'weed'
+  const navItems: readonly (readonly [Tab, string, string])[] = side === 'weed'
     ? [['deals', 'Deals', '🌿'], ['stores', 'Stores', '🏪'], ['badges', 'Badges', '🏅'], ['settings', 'Settings', '⚙️']]
     : [['deals', 'Deals', '🍺'], ['badges', 'Badges', '🏅'], ['settings', 'Settings', '⚙️']];
-  const activeColor = mode === 'weed' ? 'text-green-400' : 'text-amber-400';
+  const activeColor = side === 'weed' ? 'text-green-400' : 'text-amber-400';
+  const shown: Tab = navItems.some(([id]) => id === tab) ? tab : 'deals';
 
   return (
+    <RegionContext.Provider value={region}>
     <div className="min-h-full flex flex-col max-w-3xl mx-auto">
       <main className="flex-1 pb-20">
-        {mode === 'weed' && tab === 'deals' && <DealsPage profile={profile} onProfile={setProfile} top={top} />}
-        {mode === 'weed' && tab === 'stores' && <>{plainTop}<StoresPage profile={profile} onProfile={setProfile} /></>}
-        {mode === 'beer' && tab === 'deals' && <BeerPage profile={profile} top={top} />}
-        {tab === 'badges' && <>{plainTop}<BadgesPage side={mode} /></>}
-        {tab === 'settings' && <>{plainTop}<SettingsPage accent={mode} profile={profile} onProfile={setProfile} onChangeServer={() => setNeedServer(true)} /></>}
+        {side === 'weed' && shown === 'deals' && <DealsPage profile={profile} onProfile={setProfile} top={top} />}
+        {side === 'weed' && shown === 'stores' && <>{plainTop}<StoresPage profile={profile} onProfile={setProfile} /></>}
+        {side === 'beer' && shown === 'deals' && <BeerPage profile={profile} top={top} />}
+        {shown === 'badges' && <>{plainTop}<BadgesPage side={side} /></>}
+        {shown === 'settings' && <>{plainTop}<SettingsPage accent={side} profile={profile} onProfile={setProfile} onChangeServer={() => setNeedServer(true)} /></>}
       </main>
-      <nav className={`fixed bottom-0 inset-x-0 backdrop-blur border-t border-zinc-800 pb-[env(safe-area-inset-bottom)] ${mode === 'weed' ? 'bg-[#0e1714]/95' : 'bg-[#17130b]/95'}`}>
+      <nav className={`fixed bottom-0 inset-x-0 backdrop-blur border-t border-zinc-800 pb-[env(safe-area-inset-bottom)] ${side === 'weed' ? 'bg-[#0e1714]/95' : 'bg-[#17130b]/95'}`}>
         <div className={`max-w-3xl mx-auto grid ${navItems.length === 4 ? 'grid-cols-4' : 'grid-cols-3'}`}>
           {navItems.map(([id, label, icon]) => (
-            <button key={id} onClick={() => setTab(id)} className={`py-3 text-sm flex flex-col items-center gap-0.5 ${tab === id ? activeColor : 'text-zinc-400'}`}>
+            <button key={id} onClick={() => setTab(id)} className={`py-3 text-sm flex flex-col items-center gap-0.5 ${shown === id ? activeColor : 'text-zinc-400'}`}>
               <span className="text-lg leading-none">{icon}</span>{label}
             </button>
           ))}
         </div>
       </nav>
+      {noWeed && <NoWeedHere region={region} onClose={() => { setNoWeed(false); setTab('deals'); }} />}
     </div>
+    </RegionContext.Provider>
   );
 }

@@ -209,3 +209,5 @@ export interface RefreshStatus {
 }
 export * from './beer.ts';
 export * from './badges.ts';
+export * from './areas.ts';
+export * from './athens-postcodes.ts';

@@ -1,6 +1,7 @@
 import type { BeerPrice, BeerQuery, BeerVenue, HappyHour, RankedVenue } from '@gib/shared';
 import { haversineMiles } from '../pricing/engine.ts';
 import { bearingDegrees, openState, windowActive } from './hours.ts';
+import { inGreece, wallClockIn } from '../hours.ts';
 
 /** Fluid ounces for a size label, so a $3 can and a $6 pint can be compared fairly. */
 export function ouncesOf(size?: string): number {
@@ -8,6 +9,10 @@ export function ouncesOf(size?: string): number {
   const s = size.toLowerCase();
   const pack = /(\d+)\s*-?\s*(?:pack|pk)/.exec(s);
   const oz = /(\d+(?:\.\d+)?)\s*oz/.exec(s);
+  // Metric sizes (Europe): 500ml, 33cl, 0.5l / 0,5 L.
+  const ml = /(\d+(?:[.,]\d+)?)\s*ml\b/.exec(s), cl = /(\d+(?:[.,]\d+)?)\s*cl\b/.exec(s), l = /(\d*[.,]?\d+)\s*l(?:itre|iter)?\b/.exec(s);
+  const metric = ml ? +ml[1].replace(',', '.') : cl ? +cl[1].replace(',', '.') * 10 : l ? +l[1].replace(',', '.') * 1000 : 0;
+  if (metric > 0) return Math.round((metric / 29.5735) * 100) / 100 * (pack ? +pack[1] : 1);
   if (pack) return +pack[1] * (oz ? +oz[1] : 12);
   if (oz) return +oz[1];
   if (/pint/.test(s)) return 16;
@@ -33,7 +38,10 @@ export function rankVenues(
   prices: BeerPrice[],
   happyHours: HappyHour[],
   now = new Date(),
+  /** The real moment (`now` may be shifted to the phone's time zone). Places in Greece are judged on Athens time. */
+  instant = now,
 ): RankedVenue[] {
+  const athensNow = wallClockIn('Europe/Athens', instant);
   const byVenue = new Map<string, BeerPrice[]>();
   for (const p of prices) (byVenue.get(p.venueId) ?? byVenue.set(p.venueId, []).get(p.venueId)!).push(p);
   const hhByVenue = new Map<string, HappyHour[]>();
@@ -44,12 +52,13 @@ export function rankVenues(
     if (q.kind && q.kind !== 'all' && v.kind !== q.kind) continue;
     const distanceMiles = haversineMiles(q.lat, q.lng, v.lat, v.lng);
     if (q.maxMiles && distanceMiles > q.maxMiles) continue;
-    const { isOpen, label: hoursLabel, closingSoon } = openState(v.openingHours, now);
+    const localNow = inGreece(v) ? athensNow : now;
+    const { isOpen, label: hoursLabel, closingSoon } = openState(v.openingHours, localNow, v);
     if (q.openNow && isOpen === false) continue;
 
     const vp = (byVenue.get(v.id) ?? []).slice().sort((a, b) => perPint(a) - perPint(b));
     const hh = hhByVenue.get(v.id) ?? [];
-    const applicable = vp.filter((p) => priceAppliesNow(p, now));
+    const applicable = vp.filter((p) => priceAppliesNow(p, localNow));
     const best = applicable[0] ? { ...applicable[0], label: LABEL[applicable[0].kind] } : null;
     if (q.pricedOnly && !best) continue;
     out.push({
@@ -60,7 +69,7 @@ export function rankVenues(
       hoursLabel,
       ...(closingSoon ? { closingSoon } : {}),
       best,
-      happyHourNow: hh.some((h) => windowActive(h, now)) || applicable.some((p) => p.kind === 'happy_hour'),
+      happyHourNow: hh.some((h) => windowActive(h, localNow)) || applicable.some((p) => p.kind === 'happy_hour'),
       happyHours: hh,
       prices: vp,
       score: 0,

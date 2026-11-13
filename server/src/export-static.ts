@@ -15,14 +15,14 @@ import type { BeerPrice, BeerVenue, Deal, HappyHour, Product, RefreshStatus, Sto
 import { beerRepo, repo, DEFAULT_PROFILE } from './db.ts';
 import { config } from './config.ts';
 import { refreshAll } from './refresh.ts';
-import { refreshBeer } from './beer/refresh.ts';
+import { LAUNCH_AREAS, refreshBeer } from './beer/refresh.ts';
 import { rankItems } from './pricing/engine.ts';
 import { mergeResults } from './normalize.ts';
 import { repairPackWeight } from './sanitize.ts';
 import './sources/register.ts';
 
 export interface WeedSnapshot { stores: Store[]; products: Product[]; deals: Deal[]; status: RefreshStatus }
-export interface BeerSnapshot { venues: BeerVenue[]; prices: BeerPrice[]; happyHours: HappyHour[]; status: RefreshStatus; area: { lat: number; lng: number; miles: number } }
+export interface BeerSnapshot { venues: BeerVenue[]; prices: BeerPrice[]; happyHours: HappyHour[]; status: RefreshStatus; area: { lat: number; lng: number; miles: number }; areas?: { lat: number; lng: number; miles: number }[] }
 
 const outDir = resolve(process.argv[2] ?? 'static-data');
 const KEEP_PER_STORE_CATEGORY = 60;
@@ -131,6 +131,8 @@ const beer: BeerSnapshot = {
   happyHours: beerRepo.happyHours(),
   status: beerRepo.status(),
   area: { lat: home.lat, lng: home.lng, miles: 25 },
+  // Every area whose places are in this file (home + launch cities like Athens).
+  areas: [{ lat: home.lat, lng: home.lng, miles: 25 }, ...LAUNCH_AREAS.map(({ lat, lng, miles }) => ({ lat, lng, miles }))],
 };
 
 mkdirSync(outDir, { recursive: true });

@@ -5,17 +5,22 @@ import type { OpenStatus } from '@gib/shared';
  * Opening hours for weed stores and beer places, in OpenStreetMap opening_hours syntax
  * ("Mo-Fr 11:00-02:00; Sa,Su 10:00-02:00"). Browser-safe: the static website runs this on the phone.
  */
+// opening_hours needs a location for "PH" (public holiday) rules: San Diego by default, Athens for places in Greece.
 const NOMINATIM = { lat: 32.72, lon: -117.16, address: { country_code: 'us', state: 'California' } };
+const NOMINATIM_GR = { lat: 37.98, lon: 23.73, address: { country_code: 'gr', state: 'Attica' } };
+export const inGreece = (w?: { lat: number; lng: number }) => !!w && w.lat > 34.5 && w.lat < 42 && w.lng > 19 && w.lng < 30;
 const cache = new Map<string, OpeningHours | null>();
 
 /** "Closing soon" = open, and closes within this many minutes. */
 export const CLOSING_SOON_MINUTES = 60;
 
-function parse(value: string): OpeningHours | null {
-  if (cache.has(value)) return cache.get(value)!;
+function parse(value: string, where?: { lat: number; lng: number }): OpeningHours | null {
+  const gr = inGreece(where);
+  const key = `${gr ? 'gr' : 'us'}|${value}`;
+  if (cache.has(key)) return cache.get(key)!;
   let oh: OpeningHours | null = null;
-  try { oh = new OpeningHours(value, NOMINATIM as any); } catch { oh = null; }
-  cache.set(value, oh);
+  try { oh = new OpeningHours(value, (gr ? NOMINATIM_GR : NOMINATIM) as any); } catch { oh = null; }
+  cache.set(key, oh);
   return oh;
 }
 
@@ -38,10 +43,10 @@ export function wallClockIn(timeZone: string, now = new Date()): Date {
 export const STORE_TIME_ZONE = 'America/Los_Angeles';
 
 /** Open right now? Plus a short label: "Open until 10 PM", "Closes 9:55 PM" (closing soon), "Opens Sat 8 AM". */
-export function openState(value: string | undefined, now = new Date()): OpenStatus {
+export function openState(value: string | undefined, now = new Date(), where?: { lat: number; lng: number }): OpenStatus {
   if (!value) return { isOpen: null };
   if (/^24\/7$/.test(value.trim())) return { isOpen: true, label: 'Open 24/7' };
-  const oh = parse(value);
+  const oh = parse(value, where);
   if (!oh) return { isOpen: null };
   try {
     const isOpen = oh.getState(now);
