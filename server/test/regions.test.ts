@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { AREAS, ATHENS_POSTCODES, MAX_RESULT_MILES, NYC_ZIPS, REGIONS, REGION_ORDER, SD_ZIPS, distanceChoices, fmtDistance, fmtNear, regionAt, regionOf, type Product, type Store } from '@gib/shared';
+import { AREAS, ATHENS_POSTCODES, MAX_RESULT_MILES, NYC_ZIPS, REGIONS, REGION_ORDER, SD_ZIPS, distanceChoices, fmtDistance, fmtNear, regionAt, regionOf, weedRegionAt, type Product, type Store } from '@gib/shared';
 import { DEFAULT_PROFILE } from '../src/db.ts';
 import { computeTax } from '../src/pricing/taxes.ts';
 import { mergeWeedStatus } from '../src/refresh.ts';
@@ -203,5 +203,37 @@ describe('New York', () => {
     const m = mergeWeed([sd, ny])!;
     expect(m.stores.map((s) => s.id).sort()).toEqual(['ny', 'sd']);
     expect(m.products).toHaveLength(2);
+  });
+});
+
+describe('New York weed list is New York State only', () => {
+  // Real shops from the first live New York run, plus well-known spots either side of the Hudson and the Kills.
+  const ny: [string, number, number][] = [
+    ['Hii NYC, Williamsburg', 40.719, -73.957], ['Flynnstoned Chelsea', 40.744, -73.999], ['Flynnstoned Staten Island', 40.629, -74.114],
+    ['Flynnstoned Bay Ridge', 40.625, -74.025], ['Battery Park City', 40.711, -74.016], ['Hudson Yards', 40.754, -74.002],
+    ['Inwood', 40.868, -73.92], ['Riverside Dr / 116th', 40.80, -73.968], ['Riverdale', 40.89, -73.91], ['Yonkers', 40.93, -73.89],
+    ['St. George, Staten Island', 40.643, -74.077], ['Travis, Staten Island', 40.59, -74.19], ['Tottenville', 40.512, -74.24],
+    ['Nyack', 41.09, -73.92], ['White Plains', 41.03, -73.76], ['Mineola, Long Island', 40.75, -73.64], ['Rockaway Park', 40.58, -73.84],
+  ];
+  const notNy: [string, number, number][] = [
+    ['RISE Paramus NJ', 40.918, -74.059], ['RISE Bloomfield NJ', 40.776, -74.187], ['Gardens Garfield NJ', 40.876, -74.115],
+    ['RISE Paterson NJ', 40.938, -74.149], ['Maplewood NJ', 40.731, -74.279], ['Jersey City', 40.716, -74.04], ['Hoboken', 40.744, -74.03],
+    ['Fort Lee', 40.85, -73.97], ['Bayonne', 40.67, -74.11], ['Elizabeth', 40.66, -74.21], ['Perth Amboy', 40.507, -74.27],
+    ['Mahwah', 41.09, -74.15], ['Sandy Hook', 40.45, -74.0], ['Greenwich CT', 41.03, -73.62], ['Stamford CT', 41.05, -73.54],
+  ];
+  it.each(ny)('%s is in the New York list', (_n, lat, lng) => expect(weedRegionAt({ lat, lng })).toBe('nyc'));
+  it.each(notNy)('%s is left out', (_n, lat, lng) => expect(weedRegionAt({ lat, lng })).toBeNull());
+  it('bars across the river still count as the New York area for beer', () => expect(regionAt({ lat: 40.744, lng: -74.03 }).id).toBe('nyc'));
+  it('San Diego and Athens are unchanged', () => {
+    expect(weedRegionAt({ lat: 32.75, lng: -117.2 })).toBe('us');
+    expect(weedRegionAt({ lat: 37.98, lng: 23.73 })).toBe('europe');
+  });
+  it('the merge drops New Jersey shops from old data', () => {
+    const store = (id: string, lat: number, lng: number) => ({ id, name: id, address: '', city: '', lat, lng, sources: [{ source: 'weedmaps', externalId: id }], pickup: true, ownSitePickup: null, taxIncluded: null, delivery: [] }) as Store;
+    const product = (id: string, storeId: string) => ({ id, storeId, source: 'weedmaps', name: id, category: 'flower', price: 20, grams: 3.5 }) as unknown as Product;
+    const snap = { stores: [store('nyc', 40.719, -73.957), store('nj', 40.918, -74.059)], products: [product('a', 'nyc'), product('b', 'nj')], deals: [],
+      status: { running: false, sources: [{ source: 'weedmaps' as const, region: 'nyc' as const, ok: true, stores: 2, products: 2, finishedAt: '2026-11-13T00:00:00Z' }] } };
+    const m = mergeWeed([snap])!;
+    expect(m.stores.map((s) => s.id)).toEqual(['nyc']);
   });
 });

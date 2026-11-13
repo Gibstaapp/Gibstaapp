@@ -18,7 +18,7 @@
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { REGIONS, WEED_FILES, regionAt, type RegionId, type BeerPrice, type BeerVenue, type Deal, type HappyHour, type Product, type RefreshStatus, type Store } from '@gib/shared';
+import { REGIONS, WEED_FILES, weedRegionAt, type RegionId, type BeerPrice, type BeerVenue, type Deal, type HappyHour, type Product, type RefreshStatus, type Store } from '@gib/shared';
 import { beerRepo, repo, DEFAULT_PROFILE } from './db.ts';
 import { config } from './config.ts';
 import { refreshAll } from './refresh.ts';
@@ -122,7 +122,7 @@ beerRepo.setStatus(keepGood(beerRepo.status(), beerBefore));
 // One weed file per city, each trimmed as someone in that city sees it.
 const allStores = repo.stores(), allProducts = repo.products(), allDeals = repo.deals();
 const weedFiles = Object.entries(WEED_FILES).map(([region, file]) => {
-  const ids = new Set(allStores.filter((s) => regionAt(s).id === region).map((s) => s.id));
+  const ids = new Set(allStores.filter((s) => weedRegionAt(s) === region).map((s) => s.id));
   const stores = allStores.filter((s) => ids.has(s.id)), deals = allDeals.filter((d) => ids.has(d.storeId));
   const products = trimProducts(stores, allProducts.filter((p) => ids.has(p.storeId)), deals, region as RegionId);
   const used = new Set(products.map((p) => p.storeId));

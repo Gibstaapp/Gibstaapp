@@ -97,6 +97,34 @@ export const regionAt = (p: { lat: number; lng: number }): Region =>
   REGIONS[p.lat > 34.5 && p.lat < 42 && p.lng > 19 && p.lng < 30 ? 'europe'
     : p.lat > 40.3 && p.lat < 41.3 && p.lng > -74.6 && p.lng < -73.2 ? 'nyc' : 'us'];
 
+// Rough New Jersey and Connecticut borders inside the New York box, as [lat, lng] rings. Borders on land follow
+// the state lines; on water they run mid-river / mid-bay (Hudson, Kill Van Kull, Arthur Kill, Raritan Bay).
+const NJ_NEAR_NYC: [number, number][] = [
+  [41.3, -74.6], [41.3, -74.57], [40.995, -73.907], [40.9, -73.932], [40.85, -73.952], [40.8, -73.978], [40.76, -74.005],
+  [40.72, -74.018], [40.69, -74.035], [40.655, -74.075], [40.645, -74.13], [40.64, -74.19], [40.6, -74.205], [40.555, -74.215],
+  [40.51, -74.255], [40.495, -74.26], [40.5, -74.1], [40.52, -74.0], [40.5, -73.9], [40.3, -73.9], [40.3, -74.6],
+];
+const CT_NEAR_NYC: [number, number][] = [[41.3, -73.2], [41.3, -73.52], [41.21, -73.48], [41.1, -73.728], [40.998, -73.659], [41.0, -73.2]];
+function inRing(p: { lat: number; lng: number }, ring: [number, number][]): boolean {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [yi, xi] = ring[i], [yj, xj] = ring[j];
+    if (yi > p.lat !== yj > p.lat && p.lng < ((xj - xi) * (p.lat - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
+/**
+ * Which city's weed list a shop belongs to, or null for none. Stricter than regionAt: New York's list is New York
+ * State only (its tax is New York's), so shops across the river in New Jersey or in Connecticut are left out.
+ * Bars there still show on the beer side.
+ */
+export function weedRegionAt(p: { lat: number; lng: number }): RegionId | null {
+  const r = regionAt(p).id;
+  if (r === 'nyc' && (inRing(p, NJ_NEAR_NYC) || inRing(p, CT_NEAR_NYC))) return null;
+  return r;
+}
+
 // ---- units & money, so both regions read naturally ----
 export const KM_PER_MI = 1.609344;
 const toUnits = (miles: number, units: Region['units']) => (units === 'km' ? miles * KM_PER_MI : miles);
