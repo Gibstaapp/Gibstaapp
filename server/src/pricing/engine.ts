@@ -1,7 +1,7 @@
 import type { Category, Deal, DeliveryOption, Mode, OpenStatus, PricedItem, Product, Store, StoreOverride, UserProfile } from '@gib/shared';
 import { bestDeal, finePrintFor } from './deals.ts';
 import { computeTax } from './taxes.ts';
-import { openState } from '../hours.ts';
+import { openState, wallClockIn, STORE_TIME_ZONE } from '../hours.ts';
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -89,7 +89,7 @@ export function priceItem(product: Product, rawStore: Store, deals: Deal[], prof
     perUnit,
     unitLabel,
     distanceMiles: round2(haversineMiles(profile.lat, profile.lng, store.lat, store.lng)),
-    open: opts.open ?? openState(store.hours, now),
+    open: opts.open ?? openState(store.hours, wallClockIn(STORE_TIME_ZONE, now)),
     finePrint: finePrintFor(best.used, product.price, now),
   };
 }
@@ -132,7 +132,8 @@ export function rankItems(
     const ov = overrides.get(store.id);
     if (ov?.hidden) continue;
     let open = openByStore.get(store.id);
-    if (!open) openByStore.set(store.id, (open = openState(store.hours, now)));
+    // Store hours are San Diego time, wherever the phone is.
+    if (!open) openByStore.set(store.id, (open = openState(store.hours, wallClockIn(STORE_TIME_ZONE, now))));
     if (q.openNow && open.isOpen === false) continue;
     const item = priceItem(p, store, dealsByStore.get(store.id) ?? [], profile, { mode: q.mode, now, open }, ov);
     if (!item) continue;

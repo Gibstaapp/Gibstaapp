@@ -4,6 +4,7 @@ import { config } from '../config.ts';
 import type { Page } from 'playwright';
 import { pause, withContext } from './browser.ts';
 import { mapCategory, parseGrams, parseThcMg } from '../normalize.ts';
+import { janeHoursToOsm } from '../hours.ts';
 
 /**
  * iHeartJane. Everything comes from plain fetch, no browser needed:
@@ -226,6 +227,7 @@ function toStore(hit: any, s: any | null, area: SearchArea): Store {
     ownSitePickup: pickup ? true : null,
     taxIncluded: typeof s?.tax_included === 'boolean' ? s.tax_included : null,
     delivery: s ? deliveryFor(s, area) : [],
+    hours: janeHoursToOsm(s?.working_hours),
   };
 }
 
@@ -327,6 +329,9 @@ export function productsFromHit(h: any, storeKey: string, storeUrl: string): Pro
   const unitCount = pack ? parseInt(pack[1]) : undefined;
   const strain = String(h.category ?? '').toLowerCase();
   const thc = num(h.percent_thc);
+  // Shake, smalls and pre-ground aren't the same thing as whole buds: say so in the name when the menu does.
+  const sub = [h.root_subtype, h.kind_subtype].map((x) => String(x ?? '').trim()).find((x) => /^(shake|trim|smalls?|popcorn|(pre[- ]?)?ground)\b/i.test(x));
+  const form = category === 'flower' && sub && !new RegExp(sub.replace(/[^a-z]/gi, '.?'), 'i').test(name) ? ` (${sub})` : '';
 
   for (const w of priced) {
     const price = num(h[`price_${w}`])!;
@@ -344,7 +349,7 @@ export function productsFromHit(h: any, storeKey: string, storeUrl: string): Pro
       id: `${storeKey}:${h.product_id}:${w}`,
       storeId: storeKey,
       source: 'jane',
-      name: `${name}${label}`,
+      name: `${name}${form}${label}`,
       brand: h.brand ? String(h.brand).trim() : undefined,
       category,
       grams,

@@ -24,6 +24,12 @@ describe('beer prices: things that are not a beer price', () => {
     expect(items('$24 Pitchers on select drafts $5 Mimosas')).toEqual([]);
     expect(items('ALL beers are just $6 until 6pm & VINYL SLICES')).toEqual([]);
   });
+  it('wine in a can, bare "Can", and the name of the special', () => {
+    expect(items('Wine Archer Roose Pinot Noir 8.4oz can $12.00 Archer Roose Sauvignon Blanc 8.4')).toEqual([]);
+    expect(items('Woodbridge Cabernet 6.3oz can $10.00 Woodbridge, Chardonnay 6.3oz Can')).toEqual([]);
+    expect(items('all $9.00 PBR 24oz Tall Can $9.00 Seltzers')).toEqual([]);
+    expect(items('DAILY Drink & Food SPECIALS Bottled Beer Mondays $5 Select bottled beers Taco Tuesdays', true)).toEqual(['Select bottled beers $5']);
+  });
   it('still finds the real ones', () => {
     expect(items('Bud Light $6.00 Budweiser $6.00 Coors Light $6.00 Stella $7.00')).toEqual(['Bud Light $6', 'Coors Light $6', 'Stella $7']);
     expect(items('HAPPY HOUR · $5 Wells · $5 Select Drafts · $2 Off Cocktails', true)).toEqual(['Select Drafts $5']);

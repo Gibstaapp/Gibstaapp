@@ -143,3 +143,19 @@ export function Logo({ size = 32 }: { size?: number }) {
     </svg>
   );
 }
+
+/** Nothing to show. When "Open now" is the reason, offer one tap to see closed places with their opening times. */
+export function EmptyState({ accent, openNow, onShowClosed, children }: { accent: Accent; openNow: boolean; onShowClosed: () => void; children: ReactNode }) {
+  return (
+    <div className="p-8 text-center space-y-3">
+      <div className="text-5xl" aria-hidden="true">{openNow ? '😴' : accent === 'weed' ? '🌵' : '🫗'}</div>
+      <p className="font-semibold">{openNow ? 'Nothing is open right now' : 'Nothing here'}</p>
+      <p className="text-sm text-zinc-400">{children}</p>
+      {openNow && (
+        <button onClick={onShowClosed} className={`rounded-xl px-4 py-2 text-sm font-semibold border ${ACCENT[accent].chip}`}>
+          Show closed places and when they open
+        </button>
+      )}
+    </div>
+  );
+}

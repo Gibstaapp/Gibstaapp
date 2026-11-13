@@ -13,6 +13,15 @@ One app, two modes, picked with the switch at the top:
 
 Both modes have a **🧭 Compass** that points at the place you picked, plus list and map views.
 
+Shared by both modes:
+
+- **Open now.** Places that are closed right now are hidden (toggle in the filter bar). Cards show "Open until 10 PM",
+  an orange **Closing soon** tag in the last hour, or "Hours not listed". Weed hours come from Weedmaps; beer hours from OpenStreetMap.
+- **Getting warmer.** The compass dial fills in as you get closer: a spreading burn mark on the weed side, a glass of beer
+  (seen from above) sloshing side to side on the beer side.
+- **🏅 Badges.** Tap **Check in** on the compass when you're within 0.2 mi of a place (once per place per day). Five visits to
+  the same place earns a badge, with more at 10 and 25, plus one for five different places. Badges are saved on the phone.
+
 > The Padres game-day promo from the prototype was dropped: there's no reliable online source for it.
 > It can come back as a hand-entered `team` deal if we confirm it with a bar.
 

@@ -45,8 +45,8 @@ export default function RefreshBar({ onRefreshed, statusFn = api.status, refresh
 
   return (
     <div className="relative flex items-center gap-2">
-      <button onClick={() => setShowDetail(!showDetail)} className="text-xs text-zinc-400 text-right">
-        {status?.running ? 'Refreshing…' : `Updated ${ago(status?.lastRefreshAt)}`}
+      <button onClick={() => setShowDetail(!showDetail)} className="text-xs text-zinc-400 text-right whitespace-nowrap" title="When prices were last updated">
+        {status?.running ? 'Refreshing…' : <><span className="hidden sm:inline">Updated </span>{ago(status?.lastRefreshAt)}</>}
         {failed.length > 0 && <span className="text-amber-400"> · {failed.length} source{failed.length > 1 ? 's' : ''} failed</span>}
       </button>
       <button

@@ -6,7 +6,7 @@ import { haversine } from '../geo.ts';
 import Compass, { type CompassTarget } from '../compass/Compass.tsx';
 import { directionsUrl, useLocation } from '../compass/sensors.ts';
 import RefreshBar from '../components/RefreshBar.tsx';
-import { ACCENT, CardLink, Chips, MilesSelect, OpenBadge, OpenNowToggle, PlaceHeader, Segmented, VIEWS, cardClass, openText, pref, type PlaceView } from '../components/Place.tsx';
+import { ACCENT, CardLink, Chips, EmptyState, MilesSelect, OpenBadge, OpenNowToggle, PlaceHeader, Segmented, VIEWS, cardClass, openText, pref, type PlaceView } from '../components/Place.tsx';
 
 const KINDS: readonly (readonly [BeerVenueKind | 'all', string])[] = [['all', 'All'], ['bar', '🍻 Bars'], ['brewery', '🏭 Breweries'], ['store', '🏪 Stores']];
 const SORTS: readonly (readonly [BeerSort, string])[] = [['best', 'Best'], ['cheapest', 'Cheapest'], ['closest', 'Closest']];
@@ -157,10 +157,10 @@ export default function BeerPage({ profile, top }: { profile: UserProfile; top: 
       {error && <p className="m-4 p-3 rounded-lg bg-red-950 text-red-200 text-sm">{error}</p>}
       {!list && !error && <p className="p-6 text-zinc-400">Finding beer near you…</p>}
       {list && list.length === 0 && !loadingNote && (
-        <p className="p-6 text-zinc-400 text-sm">
-          No places{openNow ? ' open right now' : ''} within {maxMiles} mi. Try a wider distance{openNow ? ' or turn off "Open now"' : ''}.
-          If this is the first run, places are still loading (tap ↻ status).
-        </p>
+        <EmptyState accent="beer" openNow={openNow} onShowClosed={() => setOpenNow(false)}>
+          No places{openNow ? ' open right now' : ''} within {maxMiles} mi.
+          {openNow ? ' Last call was a while ago.' : ' Try a wider distance. If this is the first run, places are still loading (tap the time at the top).'}
+        </EmptyState>
       )}
 
       {list && list.length > 0 && view === 'compass' && (

@@ -23,6 +23,12 @@ describe('jane parseDealText', () => {
 });
 
 describe('jane productsFromHit', () => {
+  it('says when cheap flower is shake', () => {
+    const hit = { product_id: 1, name: 'Maui Waui', brand: 'Eighth Brother', kind: 'flower', root_subtype: 'Shake', category: 'sativa', price_ounce: 22.99, discounted_price_ounce: 16.09, url_slug: 'x' };
+    expect(productsFromHit(hit, 'jane:1', URL)[0]).toMatchObject({ name: 'Maui Waui (Shake)', grams: 28, price: 22.99, salePrice: 16.09 });
+    expect(productsFromHit({ ...hit, name: 'Maui Waui Shake 28g' }, 'jane:1', URL)[0].name).toBe('Maui Waui Shake 28g');
+    expect(productsFromHit({ ...hit, root_subtype: 'Flower' }, 'jane:1', URL)[0].name).toBe('Maui Waui');
+  });
   it('splits weights and reads sale prices', () => {
     const ps = productsFromHit({
       product_id: 9, name: 'GG4', brand: '710 Labs', kind: 'flower', root_subtype: 'Flower', category: 'hybrid', percent_thc: 23.4,

@@ -65,7 +65,7 @@ export function parseTimeRange(text: string): { start: string; end: string } | n
 
 const BEER_WORD = String.raw`(?:drafts?|draughts?|pints?|beers?|brews?|taps?|domestics?|crafts?|tall ?boys?|lagers?|ipas?|pilsners?|bottles?|cans?|mich(?:elob)?(?: ultra)?|coors(?: light)?|bud(?: light)?|modelo|pacifico|tecate|corona|stella|blue moon|pbr|miller(?: lite)?|house beers?)`;
 // Not beer, or not a single beer: wine/soda/food/etc. near the price.
-const NOT_BEER_CONTEXT = /\b(wine|glass|soda|juice|coke|sprite|lemonade|iced tea|coffee|kombucha|root beer|ginger beer|ice cream|float|soaked|battered|fried|cheese|sauce|bratwurst|upgrade|cocktails?|highballs?|spritz|champagne|mimosas?|all you can|spaghetti)\b/i;
+const NOT_BEER_CONTEXT = /\b(wine|glass|soda|juice|coke|sprite|lemonade|iced tea|coffee|kombucha|root beer|ginger beer|ice cream|float|soaked|battered|fried|cheese|sauce|bratwurst|upgrade|cocktails?|highballs?|spritz|champagne|mimosas?|all you can|spaghetti|pinot|cabernet|chardonnay|sauvignon|merlot|ros[eé]|prosecco|seltzers?)\b/i;
 const SKIP_WORD = /pitcher|bucket|tower|growler|keg|flight|off\b|wings?|tacos?|food|wine|wells?|cocktail|margarita|mimosa|champagne|shot|sliders?|fries|burger|pizza|appetizer/i;
 
 /** "$5 drafts", "$4 domestic pints", "Pints $6", "Coors Light - $3.50" */
@@ -85,6 +85,8 @@ export function parsePrices(text: string, happyHour: boolean): FoundPrice[] {
     // "$6 until 6pm": a timed special we can't place, so don't show it as the everyday price.
     if (!happyHour && end >= 0 && /^\s*(?:until|till?|before)\s+\d/i.test(text.slice(end, end + 16))) return;
     const clean = item.trim().replace(/\s+/g, ' ');
+    // A bare "Can" or "Bottles" says nothing, and "Beer Mondays" is the name of the special, not the beer.
+    if (/^(cans?|bottles?)$/i.test(clean) || /\b(mon|tues|wednes|thurs|fri|satur|sun)days?$/i.test(clean)) return;
     if (out.some((o) => o.price === price && o.item.toLowerCase() === clean.toLowerCase())) return;
     const size = /pint/i.test(clean) ? 'pint' : /tall ?boy/i.test(clean) ? '24oz' : /\b(can|bottle)s?\b/i.test(clean) ? '12oz' : undefined;
     out.push({ item: cap(clean), price, size, happyHour, text: squish(text.slice(Math.max(0, at - 60), at + 80)) });

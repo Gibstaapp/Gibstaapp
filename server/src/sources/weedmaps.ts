@@ -388,7 +388,7 @@ function toStore(l: any, detail: any | undefined, menuTaxFlag: boolean | undefin
   return {
     id: `weedmaps:${slug}`,
     name: l.name,
-    address: l.address ?? '',
+    address: String(l.address ?? '').replace(/[,\s]+$/, ''),
     city: l.city ?? '',
     lat: l.latitude,
     lng: l.longitude,
@@ -445,6 +445,9 @@ export function itemToProducts(item: any, storeId: string, listingUrl: string): 
   const unitMatch = name.match(/\b(\d{1,2})\s*(?:pk|pack|ct|count|pc|pcs|pieces)\b|\b(\d{1,2})-pack\b|\(\s*(\d{1,2})\s*\)/i);
   const unitCount = unitMatch ? parseInt(unitMatch[1] ?? unitMatch[2] ?? unitMatch[3]) : undefined;
   const url = item.slug ? `${listingUrl}/menu/${item.slug}` : listingUrl;
+  // Shake, smalls and pre-ground aren't whole buds: say so in the name when the menu's category does.
+  const sub = [edge?.name, item.category?.name].map((x) => String(x ?? '').trim()).find((x) => /^(shake|trim|smalls?|popcorn|(pre[- ]?)?ground)\b/i.test(x));
+  const shown = category === 'flower' && sub && !/shake|trim|smalls?|popcorn|ground|ready to roll/i.test(name) ? `${name} (${sub})` : name;
 
   const out: Product[] = [];
   const seen = new Set<string>();
@@ -480,7 +483,7 @@ export function itemToProducts(item: any, storeId: string, listingUrl: string): 
       id: `${storeId}:${item.id}:${vid}`,
       storeId,
       source: 'weedmaps',
-      name: variants.length > 1 && v.label && v.label !== 'each' ? `${name} (${v.label})` : name,
+      name: variants.length > 1 && v.label && v.label !== 'each' ? `${shown} (${v.label})` : shown,
       category,
       price: round2(listPrice),
       url,
@@ -652,6 +655,16 @@ export const weedmapsAdapter: SourceAdapter = {
           log(`${slug}: menu failed (${e?.message ?? e})`);
         }
       });
+
+      // Storefronts whose menu we don't read still need their detail page for opening hours (and website / tax notes).
+      await runPool(storefronts.filter((l) => !details.has(l.slug)), CONCURRENCY, async (l) => {
+        try {
+          const det = await getJson(page, `${API}/discovery/v1/listings/${listingPath(l)}/${l.slug}`);
+          if (det?.data?.listing) details.set(l.slug, det.data.listing);
+        } catch { /* hours stay unknown for this one */ }
+        await pause();
+      });
+      log(`opening hours for ${storefronts.filter((l) => weeklyHoursToOsm(details.get(l.slug)?.business_hours)).length} of ${storefronts.length} storefronts`);
 
       // ---- stores ----
       const fetchedSlugs = new Set(toFetch.map((l) => l.slug));

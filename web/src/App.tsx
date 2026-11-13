@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { UserProfile } from '@gib/shared';
-import { api, needsServerUrl, AuthError } from './api.ts';
+import { api, needsServerUrl, AuthError, STATIC } from './api.ts';
 import PasscodeScreen from './pages/PasscodeScreen.tsx';
 import Onboarding from './pages/Onboarding.tsx';
 import DealsPage from './pages/DealsPage.tsx';
@@ -47,12 +47,13 @@ export default function App() {
   if (error) {
     return (
       <div className="p-6 max-w-md mx-auto space-y-4">
-        <h1 className="text-xl font-bold">Can't reach the Gibstaapp server</h1>
+        <Logo size={48} />
+        <h1 className="text-xl font-bold">{STATIC ? "Couldn't load today's deals" : "Can't reach the Gibstaapp server"}</h1>
         <p className="text-zinc-400 text-sm">{error}</p>
-        <p className="text-zinc-400 text-sm">Make sure the server is running on your PC (and Tailscale is connected if you're away from home).</p>
+        <p className="text-zinc-400 text-sm">{STATIC ? 'Check your connection and try again.' : "Make sure the server is running on your PC and you're using its current link."}</p>
         <div className="flex gap-2">
           <button className="btn-primary px-4 py-2 rounded-lg bg-green-500 text-black font-semibold" onClick={loadProfile}>Retry</button>
-          <button className="px-4 py-2 rounded-lg bg-zinc-800" onClick={() => setNeedServer(true)}>Change server</button>
+          {!STATIC && <button className="px-4 py-2 rounded-lg bg-zinc-800" onClick={() => setNeedServer(true)}>Change server</button>}
         </div>
       </div>
     );

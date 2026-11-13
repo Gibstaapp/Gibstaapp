@@ -19,7 +19,23 @@ function parse(value: string): OpeningHours | null {
   return oh;
 }
 
-const fmtTime = (d: Date) => d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/Los_Angeles' }).replace(':00', '');
+// Times are read off `now`'s own clock, so callers pass a Date whose local time is the place's wall clock
+// (see wallClockIn). That keeps "open?" and the label in the same time zone.
+const fmtTime = (d: Date) => d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }).replace(':00', '');
+
+/** A Date whose local clock reads what the clock on the wall reads in `timeZone` right now. */
+export function wallClockIn(timeZone: string, now = new Date()): Date {
+  try {
+    const parts = new Intl.DateTimeFormat('en-US', { timeZone, hourCycle: 'h23', year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric', second: 'numeric' }).formatToParts(now);
+    const v = (t: string) => Number(parts.find((x) => x.type === t)?.value);
+    const d = new Date(v('year'), v('month') - 1, v('day'), v('hour'), v('minute'), v('second'));
+    return Number.isNaN(d.getTime()) ? now : d;
+  } catch {
+    return now;
+  }
+}
+/** Every weed store is in San Diego County. */
+export const STORE_TIME_ZONE = 'America/Los_Angeles';
 
 /** Open right now? Plus a short label: "Open until 10 PM", "Closes 9:55 PM" (closing soon), "Opens Sat 8 AM". */
 export function openState(value: string | undefined, now = new Date()): OpenStatus {
@@ -33,7 +49,7 @@ export function openState(value: string | undefined, now = new Date()): OpenStat
     if (!next) return { isOpen, label: isOpen ? 'Open 24/7' : 'Closed' };
     const minsLeft = (next.getTime() - now.getTime()) / 60_000;
     const sameDay = next.toDateString() === now.toDateString() || minsLeft < 12 * 60;
-    const when = sameDay ? fmtTime(next) : `${next.toLocaleDateString('en-US', { weekday: 'short', timeZone: 'America/Los_Angeles' })} ${fmtTime(next)}`;
+    const when = sameDay ? fmtTime(next) : `${next.toLocaleDateString('en-US', { weekday: 'short' })} ${fmtTime(next)}`;
     if (!isOpen) return { isOpen, label: `Opens ${when}` };
     const closingSoon = minsLeft <= CLOSING_SOON_MINUTES;
     return { isOpen, label: closingSoon ? `Closes ${when}` : `Open until ${when}`, ...(closingSoon ? { closingSoon } : {}) };
@@ -46,11 +62,11 @@ const OSM_DAYS: [string, string][] = [
   ['monday', 'Mo'], ['tuesday', 'Tu'], ['wednesday', 'We'], ['thursday', 'Th'], ['friday', 'Fr'], ['saturday', 'Sa'], ['sunday', 'Su'],
 ];
 
-/** "6:00am" / "9:55 PM" / "12:00am" -> "06:00" / "21:55" / "00:00". */
+/** "6:00am" / "9:55 PM" / "12:00am" / "21:00" -> "06:00" / "21:55" / "00:00" / "21:00". */
 export function to24h(t: string): string | null {
-  const m = /^\s*(\d{1,2})(?::(\d{2}))?\s*([ap])\.?m\.?\s*$/i.exec(t);
-  if (!m) return null;
-  const h = Number(m[1]) % 12 + (m[3].toLowerCase() === 'p' ? 12 : 0);
+  const m = /^\s*(\d{1,2})(?::(\d{2}))?\s*(?:([ap])\.?m\.?)?\s*$/i.exec(t);
+  if (!m || (!m[3] && m[2] == null)) return null; // a bare "9" could be anything
+  const h = m[3] ? Number(m[1]) % 12 + (m[3].toLowerCase() === 'p' ? 12 : 0) : Number(m[1]);
   const min = Number(m[2] ?? 0);
   if (h > 23 || min > 59) return null;
   return `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
@@ -80,4 +96,27 @@ export function weeklyHoursToOsm(week: Record<string, { open?: string | null; cl
   if (!anyOpen) return undefined;
   const text = parts.join('; ');
   return parse(text) ? text : undefined;
+}
+
+type Week = NonNullable<Parameters<typeof weeklyHoursToOsm>[0]>;
+
+/** Jane: [{ day: "monday", period: { from: "07:00", to: "21:00" } }, ...] */
+export function janeHoursToOsm(list: unknown): string | undefined {
+  if (!Array.isArray(list)) return undefined;
+  const week: Week = {};
+  for (const x of list) {
+    const day = String(x?.day ?? '').toLowerCase();
+    if (day && x?.period?.from && x?.period?.to) week[day] = { open: String(x.period.from), close: String(x.period.to) };
+  }
+  return weeklyHoursToOsm(week);
+}
+
+/** Dutchie: { Monday: { active: true, start: "6:00 AM", end: "9:45 PM" }, ... } */
+export function dutchieHoursToOsm(byDay: unknown): string | undefined {
+  if (!byDay || typeof byDay !== 'object') return undefined;
+  const week: Week = {};
+  for (const [day, v] of Object.entries(byDay as Record<string, { active?: boolean | null; start?: string | null; end?: string | null } | null>)) {
+    if (v) week[day.toLowerCase()] = { open: v.start, close: v.end, is_closed: v.active === false };
+  }
+  return weeklyHoursToOsm(week);
 }

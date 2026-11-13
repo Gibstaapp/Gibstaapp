@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { BeerVenue, Product, Store } from '@gib/shared';
-import { openState, to24h, weeklyHoursToOsm } from '../src/hours.ts';
+import { dutchieHoursToOsm, janeHoursToOsm, openState, to24h, wallClockIn, weeklyHoursToOsm } from '../src/hours.ts';
 import { rankVenues } from '../src/beer/rank.ts';
 import { mergeResults } from '../src/normalize.ts';
 import { rankItems } from '../src/pricing/engine.ts';
@@ -25,6 +25,22 @@ describe('openState', () => {
   });
 });
 
+describe('time zones', () => {
+  it('wallClockIn gives the clock on the wall in that zone', () => {
+    const noonPacific = new Date('2026-11-11T20:00:00Z');
+    const sd = wallClockIn('America/Los_Angeles', noonPacific);
+    expect([sd.getDay(), sd.getHours(), sd.getMinutes()]).toEqual([3, 12, 0]);
+    const ny = wallClockIn('America/New_York', noonPacific);
+    expect(ny.getHours()).toBe(15);
+    expect(wallClockIn('Not/AZone', noonPacific)).toBe(noonPacific);
+  });
+  it('a San Diego store is judged on San Diego time', () => {
+    // 9:30 PM in San Diego = 12:30 AM the next day in New York. Store closes at 10 PM Pacific: still open.
+    const sd = wallClockIn('America/Los_Angeles', new Date('2026-11-12T05:30:00Z'));
+    expect(openState('Mo-Su 08:00-22:00', sd)).toMatchObject({ isOpen: true, closingSoon: true, label: 'Closes 10 PM' });
+  });
+});
+
 describe('weekly hours from listing sites', () => {
   it('12-hour times', () => {
     expect(to24h('6:00am')).toBe('06:00');
@@ -45,6 +61,14 @@ describe('weekly hours from listing sites', () => {
   it('midnight close and all-day', () => {
     expect(weeklyHoursToOsm({ monday: { open: '8:00am', close: '12:00am' } })).toBe('Mo 08:00-24:00');
     expect(weeklyHoursToOsm({ monday: { open: '12:00am', close: '12:00am' } })).toBe('Mo 00:00-24:00');
+  });
+  it('Jane and Dutchie shapes', () => {
+    expect(janeHoursToOsm([{ day: 'monday', period: { from: '07:00', to: '21:00' } }, { day: 'sunday', period: { from: '08:00', to: '20:00' } }])).toBe('Mo 07:00-21:00; Su 08:00-20:00');
+    expect(dutchieHoursToOsm({ Monday: { active: true, start: '6:00 AM', end: '9:45 PM' }, Tuesday: { active: false, start: '6:00 AM', end: '9:45 PM' } })).toBe('Mo 06:00-21:45');
+    expect(janeHoursToOsm(null)).toBeUndefined();
+    expect(dutchieHoursToOsm({})).toBeUndefined();
+    expect(to24h('21:00')).toBe('21:00');
+    expect(to24h('9')).toBeNull();
   });
   it('nothing usable -> undefined', () => {
     expect(weeklyHoursToOsm(undefined)).toBeUndefined();

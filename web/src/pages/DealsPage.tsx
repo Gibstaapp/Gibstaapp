@@ -5,7 +5,7 @@ import { api } from '../api.ts';
 import DealCard from '../components/DealCard.tsx';
 import RefreshBar from '../components/RefreshBar.tsx';
 import MapView from '../components/MapView.tsx';
-import { ACCENT, Chips, MilesSelect, OpenNowToggle, Segmented, VIEWS, pref, type PlaceView } from '../components/Place.tsx';
+import { ACCENT, Chips, EmptyState, MilesSelect, OpenNowToggle, Segmented, VIEWS, pref, type PlaceView } from '../components/Place.tsx';
 
 const DISTANCES = [5, 10, 15, 20, 30, 50];
 const CATEGORY_CHIPS = CATEGORIES.map((c) => [c.id, c.label] as const);
@@ -77,10 +77,10 @@ export default function DealsPage({ profile, onProfile, top }: { profile: UserPr
       {error && <p className="m-4 p-3 rounded-lg bg-red-950 text-red-200 text-sm">{error}</p>}
       {!shown && !error && <p className="p-6 text-zinc-400">Loading deals…</p>}
       {shown && shown.length === 0 && (
-        <p className="p-6 text-zinc-400 text-sm">
+        <EmptyState accent="weed" openNow={openNow} onShowClosed={() => setOpenNow(false)}>
           No {mode} results{openNow ? ' open right now' : ''} for this category{mode === 'pickup' ? ` within ${maxMiles} mi` : ''}.
-          Try a wider distance{openNow ? ' or turn off "Open now"' : ''}.
-        </p>
+          {openNow ? ' The deals will still be there in the morning.' : ' Try a wider distance or another category.'}
+        </EmptyState>
       )}
 
       {shown && shown.length > 0 && view === 'map' && <MapView items={shown} profile={profile} />}
