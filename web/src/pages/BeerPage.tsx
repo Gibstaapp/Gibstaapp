@@ -1,5 +1,6 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import type { BeerPrice, BeerSort, BeerVenueKind, OpenStatus, RankedVenue, UserProfile } from '@gib/shared';
+import { BEER_STATUS_SOURCES, CURRENCY_SYMBOL, MAX_RESULT_MILES, regionAt, distanceChoices, fmtDistance, type BeerPrice, type BeerSort, type BeerVenueKind, type OpenStatus, type RankedVenue, type UserProfile } from '@gib/shared';
+import { snapTo, useRegion } from '../region.ts';
 import { MapContainer, TileLayer, CircleMarker, Popup } from 'react-leaflet';
 import { api, STATIC } from '../api.ts';
 import { haversine } from '../geo.ts';
@@ -10,11 +11,12 @@ import { ACCENT, CardLink, Chips, EmptyState, MilesSelect, OpenBadge, OpenNowTog
 
 const KINDS: readonly (readonly [BeerVenueKind | 'all', string])[] = [['all', 'All'], ['bar', '🍻 Bars'], ['brewery', '🏭 Breweries'], ['store', '🏪 Stores']];
 const SORTS: readonly (readonly [BeerSort, string])[] = [['best', 'Best'], ['cheapest', 'Cheapest'], ['closest', 'Closest']];
-const DISTANCES = [1, 2, 5, 10, 20, 40];
+const DISTANCES_MI = [1, 2, 5, 10, 20, 40], DISTANCES_KM = [1, 2, 5, 10, 20, 50];
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const KIND_ICON: Record<BeerVenueKind, string> = { bar: '🍻', brewery: '🏭', store: '🏪' };
 
-const money = (n: number) => `$${n % 1 === 0 ? n.toFixed(0) : n.toFixed(2)}`;
+/** $5 / €5.50: each price keeps the currency it was posted in (San Diego data is dollars). */
+const money = (n: number, currency: BeerPrice['currency'] = 'USD') => `${CURRENCY_SYMBOL[currency ?? 'USD']}${n % 1 === 0 ? n.toFixed(0) : n.toFixed(2)}`;
 const t12 = (hhmm: string) => { const [h, m] = hhmm.split(':').map(Number); return `${((h + 11) % 12) + 1}${m ? `:${String(m).padStart(2, '0')}` : ''}${h < 12 ? 'am' : 'pm'}`; };
 export function daysLabel(days?: number[]) {
   if (!days?.length) return 'Days not listed';
@@ -34,6 +36,7 @@ function sourceBadge(p: BeerPrice): ReactNode {
   if (p.source === 'team') return <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-500/20 text-green-300">✔ Verified</span>;
   if (p.source === 'user') return <span className="text-[10px] px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-300">Reported {ago(p.reportedAt)}</span>;
   if (p.source === 'website') return <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-700 text-zinc-300">From their website</span>;
+  if (p.sourceUrl) return <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-700 text-zinc-300">From their menu · {new Date(p.reportedAt).toLocaleDateString([], { month: 'short', day: 'numeric' })}</span>;
   return <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-700 text-zinc-300">Added by us</span>;
 }
 const sizeLabel = (p: Pick<BeerPrice, 'size'>) => (p.size ? ` · ${p.size}` : '');
@@ -53,7 +56,7 @@ function VenueCard({ r, rank, onOpen, onPointMe }: { r: RankedVenue; rank: numbe
     <article onClick={onOpen} className={`${cardClass('beer')} cursor-pointer active:bg-zinc-800`}>
       <PlaceHeader accent="beer" rank={rank} icon={KIND_ICON[r.venue.kind]} name={r.venue.name}
         distanceMiles={r.distanceMiles} address={r.venue.address} open={venueOpen(r)}
-        price={r.best ? money(r.best.price) : undefined} priceNote={priceNote(r)} />
+        price={r.best ? money(r.best.price, r.best.currency) : undefined} priceNote={priceNote(r)} />
       {r.best && (
         <div>
           <p className="font-medium leading-snug">{r.best.item}{sizeLabel(r.best)}</p>
@@ -78,7 +81,15 @@ export default function BeerPage({ profile, top }: { profile: UserProfile; top: 
   const [kind, setKind] = useState<BeerVenueKind | 'all'>(() => (pref.get('gib.beer.kind') as BeerVenueKind) || 'all');
   const [sort, setSort] = useState<BeerSort>(() => (pref.get('gib.beer.sort') as BeerSort) || 'best');
   const [openNow, setOpenNow] = useState(() => pref.get('gib.beer.open') !== '0');
-  const [maxMiles, setMaxMiles] = useState(() => Number(pref.get('gib.beer.miles')) || 10);
+  const region = useRegion();
+  const choices = distanceChoices(region.units, DISTANCES_MI, DISTANCES_KM);
+  const [maxMiles, setMaxMiles] = useState(() => snapTo(Number(pref.get('gib.beer.miles')) || 10, choices));
+  // Your city's own daily refresh: San Diego ($) and Athens (€) update separately.
+  const statusFn = useCallback(async () => {
+    const s = await api.beer.status();
+    const sources = s.sources.filter((x) => BEER_STATUS_SOURCES[region.id].includes(x.source));
+    return { ...s, sources, lastRefreshAt: sources.map((x) => x.finishedAt).sort().pop() ?? s.lastRefreshAt };
+  }, [region.id]);
   const [view, setView] = useState<PlaceView>(() => (pref.get('gib.beer.view') as PlaceView) || 'list');
   const [list, setList] = useState<RankedVenue[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -89,7 +100,13 @@ export default function BeerPage({ profile, top }: { profile: UserProfile; top: 
   const { fix, error: locError, retry } = useLocation(home);
   // Re-query only when we've moved a bit, not on every GPS jitter.
   const [queryAt, setQueryAt] = useState(home);
-  useEffect(() => { if (haversine(queryAt.lat, queryAt.lng, fix.lat, fix.lng) > 0.15) setQueryAt({ lat: fix.lat, lng: fix.lng }); }, [fix, queryAt]);
+  // Search around where you are, unless that's more than 100 mi from your home area code: then around home
+  // (results never come from more than MAX_RESULT_MILES away from it, so San Diego and Athens stay apart).
+  const awayFromHome = fix.source === 'gps' && haversine(home.lat, home.lng, fix.lat, fix.lng) > MAX_RESULT_MILES;
+  useEffect(() => {
+    const want = awayFromHome ? home : { lat: fix.lat, lng: fix.lng };
+    if (haversine(queryAt.lat, queryAt.lng, want.lat, want.lng) > 0.15) setQueryAt(want);
+  }, [fix, queryAt, home, awayFromHome]);
 
   useEffect(() => {
     pref.set('gib.beer.kind', kind); pref.set('gib.beer.sort', sort); pref.set('gib.beer.view', view);
@@ -98,17 +115,17 @@ export default function BeerPage({ profile, top }: { profile: UserProfile; top: 
 
   const load = useCallback(() => {
     setError(null);
-    api.beer.venues({ lat: queryAt.lat, lng: queryAt.lng, kind, sort, openNow, maxMiles, limit: 200 })
+    api.beer.venues({ lat: queryAt.lat, lng: queryAt.lng, home, kind, sort, openNow, maxMiles, limit: 200 })
       .then((r) => { setList(r.venues); setLoadingNote(r.loading); setIdx(0); })
       .catch((e) => setError(String(e.message ?? e)));
-  }, [queryAt, kind, sort, openNow, maxMiles]);
+  }, [queryAt, home, kind, sort, openNow, maxMiles]);
   useEffect(load, [load]);
   // Keep the detail sheet in sync after a report.
   const refreshDetail = useCallback(async (id: string) => {
-    const r = await api.beer.venues({ lat: queryAt.lat, lng: queryAt.lng, kind, sort, openNow: false, maxMiles: 60, limit: 400 });
+    const r = await api.beer.venues({ lat: queryAt.lat, lng: queryAt.lng, home, kind, sort, openNow: false, maxMiles: 60, limit: 400 });
     setList((cur) => cur?.map((x) => r.venues.find((y) => y.venue.id === x.venue.id) ?? x) ?? null);
     setDetail(r.venues.find((x) => x.venue.id === id) ?? null);
-  }, [queryAt, kind, sort]);
+  }, [queryAt, home, kind, sort]);
 
   const pointAt = (venueId: string) => {
     const i = list?.findIndex((x) => x.venue.id === venueId) ?? -1;
@@ -123,7 +140,7 @@ export default function BeerPage({ profile, top }: { profile: UserProfile; top: 
     id: current.venue.id, name: `${KIND_ICON[current.venue.kind]} ${current.venue.name}`, placeName: current.venue.name, lat: current.venue.lat, lng: current.venue.lng,
     headline: current.best ? (
       <div className="flex flex-wrap items-baseline gap-x-2">
-        <span className={`text-2xl font-bold ${ACCENT.beer.text}`}>{money(current.best.price)}</span>
+        <span className={`text-2xl font-bold ${ACCENT.beer.text}`}>{money(current.best.price, current.best.currency)}</span>
         <span className="text-sm text-zinc-300">{current.best.item}{sizeLabel(current.best)}</span>
       </div>
     ) : <div className="text-sm text-zinc-400">No price yet</div>,
@@ -141,12 +158,12 @@ export default function BeerPage({ profile, top }: { profile: UserProfile; top: 
       <header className={`sticky top-0 z-20 ${ACCENT.beer.header} backdrop-blur border-b border-zinc-800 pt-[env(safe-area-inset-top)]`}>
         <div className="px-4 pt-3 pb-2 flex items-center justify-between gap-3">
           {top}
-          <RefreshBar onRefreshed={load} statusFn={api.beer.status} refreshFn={api.beer.refresh} accent="beer" />
+          <RefreshBar onRefreshed={load} statusFn={statusFn} refreshFn={api.beer.refresh} accent="beer" />
         </div>
         <Chips accent="beer" items={KINDS} value={kind} onChange={setKind} />
         <div className="flex flex-wrap items-center gap-2 px-4 pb-3 text-sm">
           <Segmented items={SORTS} value={sort} onChange={setSort} />
-          <MilesSelect value={maxMiles} options={DISTANCES} onChange={setMaxMiles} />
+          <MilesSelect value={maxMiles} choices={choices} onChange={setMaxMiles} />
           <OpenNowToggle value={openNow} onChange={setOpenNow} />
           <div className="flex-1" />
           <Segmented items={VIEWS} value={view} onChange={setView} />
@@ -158,7 +175,7 @@ export default function BeerPage({ profile, top }: { profile: UserProfile; top: 
       {!list && !error && <p className="p-6 text-zinc-400">Finding beer near you…</p>}
       {list && list.length === 0 && !loadingNote && (
         <EmptyState accent="beer" openNow={openNow} onShowClosed={() => setOpenNow(false)}>
-          No places{openNow ? ' open right now' : ''} within {maxMiles} mi.
+          No places{openNow ? ' open right now' : ''} within {fmtDistance(maxMiles, region.units, 0)}.
           {openNow ? ' Last call was a while ago.' : ' Try a wider distance. If this is the first run, places are still loading (tap the time at the top).'}
         </EmptyState>
       )}
@@ -172,7 +189,8 @@ export default function BeerPage({ profile, top }: { profile: UserProfile; top: 
 
       {list && list.length > 0 && view === 'list' && (
         <div className="p-3 space-y-3">
-          <p className="text-xs text-zinc-500 px-1">{list.length} places{openNow ? ' open now' : ''} · {priced} with a price right now · from {fix.source === 'gps' ? 'your location' : `ZIP ${profile.homeZip}`}</p>
+          <p className="text-xs text-zinc-500 px-1">{list.length} places{openNow ? ' open now' : ''} · {priced} with a price right now · from {fix.source === 'gps' && !awayFromHome ? 'your location' : `${region.codeName} ${profile.homeZip}`}</p>
+          {awayFromHome && <p className="text-xs text-amber-300/80 px-1">You're more than {fmtDistance(MAX_RESULT_MILES, region.units, 0)} from your home {region.codeName}, so these are places near it. Change it in Settings.</p>}
           <ul className="space-y-3">
             {list.map((r, i) => (<Fragment key={r.venue.id}>
               {openNow && r.isOpen === null && (i === 0 || list[i - 1].isOpen !== null) && (
@@ -212,7 +230,7 @@ function BeerMap({ list, fix, onPick }: { list: RankedVenue[]; fix: { lat: numbe
             <Popup>
               <div className="text-sm">
                 <strong>{r.venue.name}</strong><br />
-                {r.best ? <>{money(r.best.price)} {r.best.item} ({r.best.label})</> : 'No price yet'}<br />
+                {r.best ? <>{money(r.best.price, r.best.currency)} {r.best.item} ({r.best.label})</> : 'No price yet'}<br />
                 {openText(venueOpen(r))}<br />
                 <button className="underline" onClick={() => onPick(r)}>Details</button>
               </div>
@@ -226,6 +244,7 @@ function BeerMap({ list, fix, onPick }: { list: RankedVenue[]; fix: { lat: numbe
 
 function VenueSheet({ r, onClose, onChanged, onCompass }: { r: RankedVenue; onClose: () => void; onChanged: () => void; onCompass: () => void }) {
   const v = r.venue;
+  const { units } = useRegion();
   const [reporting, setReporting] = useState(false);
   const sheet = useRef<HTMLDivElement>(null);
   useEffect(() => { sheet.current?.scrollTo(0, 0); }, [r.venue.id]);
@@ -235,7 +254,7 @@ function VenueSheet({ r, onClose, onChanged, onCompass }: { r: RankedVenue; onCl
         <div className="flex justify-between gap-3">
           <div>
             <h2 className="text-xl font-bold leading-tight">{KIND_ICON[v.kind]} {v.name}</h2>
-            <p className="text-sm text-zinc-400">{r.distanceMiles.toFixed(1)} mi · <OpenBadge s={venueOpen(r)} /></p>
+            <p className="text-sm text-zinc-400">{fmtDistance(r.distanceMiles, units)} · <OpenBadge s={venueOpen(r)} /></p>
             {v.address && <p className="text-sm text-zinc-400">{v.address}</p>}
           </div>
           <button onClick={onClose} className="text-zinc-400 text-2xl leading-none">×</button>
@@ -254,7 +273,7 @@ function VenueSheet({ r, onClose, onChanged, onCompass }: { r: RankedVenue; onCl
             {r.prices.map((p) => (
               <li key={p.id} className={`rounded-xl border p-2.5 text-sm ${r.best?.id === p.id ? 'border-amber-500/70 bg-amber-500/10' : 'border-zinc-800 bg-zinc-900'}`}>
                 <div className="flex justify-between gap-2">
-                  <span><b className="text-amber-400">{money(p.price)}</b> {p.item}{sizeLabel(p)}</span>
+                  <span><b className="text-amber-400">{money(p.price, p.currency)}</b> {p.item}{sizeLabel(p)}</span>
                   {sourceBadge(p)}
                 </div>
                 <div className="text-xs text-zinc-400 mt-0.5">
@@ -281,18 +300,20 @@ function VenueSheet({ r, onClose, onChanged, onCompass }: { r: RankedVenue; onCl
                 </li>
               ))}
             </ul>
-            <p className="text-[11px] text-zinc-500 mt-1">Read automatically from their website. Double-check before you go.</p>
+            <p className="text-[11px] text-zinc-500 mt-1">{r.happyHours.every((h) => h.source === 'seed') ? 'From their website, checked by us.' : 'Read automatically from their website.'} Double-check before you go.</p>
           </section>
         )}
 
-        {reporting ? <ReportForm venueId={v.id} onDone={() => { setReporting(false); onChanged(); }} onCancel={() => setReporting(false)} />
+        {reporting ? <ReportForm venue={v} onDone={() => { setReporting(false); onChanged(); }} onCancel={() => setReporting(false)} />
           : <button onClick={() => setReporting(true)} className="w-full rounded-lg border border-amber-500/60 text-amber-300 py-2 text-sm font-semibold">+ Report a price</button>}
       </div>
     </div>
   );
 }
 
-function ReportForm({ venueId, onDone, onCancel }: { venueId: string; onDone: () => void; onCancel: () => void }) {
+function ReportForm({ venue, onDone, onCancel }: { venue: { id: string; lat: number; lng: number }; onDone: () => void; onCancel: () => void }) {
+  const venueId = venue.id;
+  const { currency } = regionAt(venue); // the place's currency (Athens = €)
   const [item, setItem] = useState('');
   const [price, setPrice] = useState('');
   const [size, setSize] = useState('pint');
@@ -306,7 +327,7 @@ function ReportForm({ venueId, onDone, onCancel }: { venueId: string; onDone: ()
   const submit = async () => {
     setErr(null);
     try {
-      await api.beer.report({ venueId, item, price: Number(price), size, kind, note, ...(timed ? { days, start, end } : {}) });
+      await api.beer.report({ venueId, item, price: Number(price), currency, size, kind, note, ...(timed ? { days, start, end } : {}) });
       onDone();
     } catch (e: any) { setErr(e.message); }
   };
@@ -316,7 +337,7 @@ function ReportForm({ venueId, onDone, onCancel }: { venueId: string; onDone: ()
       <h3 className="font-semibold">Report a price</h3>
       <input className={`${inp} w-full`} placeholder="Beer (e.g. Modelo, house IPA, any draft)" value={item} onChange={(e) => setItem(e.target.value)} />
       <div className="flex gap-2">
-        <input className={`${inp} w-24`} inputMode="decimal" placeholder="$" value={price} onChange={(e) => setPrice(e.target.value.replace(/[^0-9.]/g, ''))} />
+        <input className={`${inp} w-24`} inputMode="decimal" placeholder={CURRENCY_SYMBOL[currency]} value={price} onChange={(e) => setPrice(e.target.value.replace(/[^0-9.]/g, ''))} />
         <select className={`${inp} flex-1`} value={size} onChange={(e) => setSize(e.target.value)}>
           {['pint', '12oz', '16oz', '20oz', '24oz', '6-pack', '12-pack', 'pitcher'].map((s) => <option key={s}>{s}</option>)}
         </select>

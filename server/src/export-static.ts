@@ -3,6 +3,9 @@
  *
  *   GIB_DB=/tmp/snap.db PREV_URL=https://<github-owner>.github.io/Gibstaapp npx tsx src/export-static.ts ../web/dist/data
  *
+ * REFRESH=athens: only the Athens beer refresh (euros); weed and San Diego beer keep the data they have.
+ * SKIP_REFRESH=1: no refreshes at all, just merge what's there (deploys after a code change).
+ *
  * 1. Loads the previous snapshot from the live site, so a source that fails today keeps yesterday's data.
  * 2. Runs the normal weed refresh (all enabled sources) and the beer refresh for the home area.
  * 3. Writes weed.json / beer.json / meta.json. Products are trimmed to the cheapest ones per
@@ -15,14 +18,14 @@ import type { BeerPrice, BeerVenue, Deal, HappyHour, Product, RefreshStatus, Sto
 import { beerRepo, repo, DEFAULT_PROFILE } from './db.ts';
 import { config } from './config.ts';
 import { refreshAll } from './refresh.ts';
-import { refreshBeer } from './beer/refresh.ts';
+import { LAUNCH_AREAS, applySeed, refreshBeer } from './beer/refresh.ts';
 import { rankItems } from './pricing/engine.ts';
 import { mergeResults } from './normalize.ts';
 import { repairPackWeight } from './sanitize.ts';
 import './sources/register.ts';
 
 export interface WeedSnapshot { stores: Store[]; products: Product[]; deals: Deal[]; status: RefreshStatus }
-export interface BeerSnapshot { venues: BeerVenue[]; prices: BeerPrice[]; happyHours: HappyHour[]; status: RefreshStatus; area: { lat: number; lng: number; miles: number } }
+export interface BeerSnapshot { venues: BeerVenue[]; prices: BeerPrice[]; happyHours: HappyHour[]; status: RefreshStatus; area: { lat: number; lng: number; miles: number }; areas?: { lat: number; lng: number; miles: number }[] }
 
 const outDir = resolve(process.argv[2] ?? 'static-data');
 const KEEP_PER_STORE_CATEGORY = 60;
@@ -99,13 +102,22 @@ function trimProducts(stores: Store[], products: Product[], deals: Deal[]): Prod
 }
 
 await loadPrevious();
+// Hand-checked deals (beer-seed.json) always go in, even when nothing is refreshed: the previous snapshot only
+// carries over website-found prices, so without this a code-only deploy dropped them.
+applySeed();
 const weedBefore = repo.refreshStatus(), beerBefore = beerRepo.status();
 console.log('[export] sources:', Object.entries(config.sources).filter(([, on]) => on).map(([k]) => k).join(', '));
 // SKIP_REFRESH=1: just export what's in the database (for testing).
-const [weedRun] = process.env.SKIP_REFRESH ? [repo.refreshStatus()] : await Promise.all([
+const athensOnly = process.env.REFRESH === 'athens';
+const [weedRun] = process.env.SKIP_REFRESH || athensOnly ? [repo.refreshStatus()] : await Promise.all([
   refreshAll(),
+  // San Diego ($) and Athens (€) are separate refreshes; one failing doesn't stop the other.
   refreshBeer({ forceOsm: true }).catch((e) => console.error('[export] beer', e)),
 ]);
+if (athensOnly && !process.env.SKIP_REFRESH) {
+  console.log('[export] Athens-only beer refresh');
+  await refreshBeer({ region: 'europe', forceOsm: true }).catch((e) => console.error('[export] athens', e));
+}
 
 // A source that failed today is still shown with its last good data: report that, not the failure.
 const keepGood = (now: RefreshStatus, before: RefreshStatus): RefreshStatus => ({
@@ -131,6 +143,8 @@ const beer: BeerSnapshot = {
   happyHours: beerRepo.happyHours(),
   status: beerRepo.status(),
   area: { lat: home.lat, lng: home.lng, miles: 25 },
+  // Every area whose places are in this file (home + launch cities like Athens).
+  areas: [{ lat: home.lat, lng: home.lng, miles: 25 }, ...LAUNCH_AREAS.map(({ lat, lng, miles }) => ({ lat, lng, miles }))],
 };
 
 mkdirSync(outDir, { recursive: true });

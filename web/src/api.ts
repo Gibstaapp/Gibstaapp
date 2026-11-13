@@ -1,4 +1,4 @@
-import type { BeerPrice, BeerQuery, BeerReport, Category, Mode, PricedItem, RankedVenue, RefreshStatus, Store, StoreOverride, UserProfile } from '@gib/shared';
+import type { BeerPrice, BeerQuery, BeerReport, Category, HomeArea, Mode, PricedItem, RankedVenue, RefreshStatus, Store, StoreOverride, UserProfile } from '@gib/shared';
 
 const SERVER_KEY = 'gib.serverUrl';
 const PASS_KEY = 'gib.pass';
@@ -119,7 +119,7 @@ const serverApi = {
     return mergedProfile();
   },
   publicUrl: () => call<{ url: string | null }>('/api/public-url'),
-  zips: () => call<Record<string, { lat: number; lng: number; area: string }>>('/api/zips'),
+  zips: () => call<Record<string, HomeArea>>('/api/zips'),
   status: () => call<RefreshStatus>('/api/status'),
   refresh: () => call<RefreshStatus>('/api/refresh', { method: 'POST' }),
   testNotify: () => call<{ sent: boolean; body: string; reason?: string }>('/api/notify/test', { method: 'POST' }),

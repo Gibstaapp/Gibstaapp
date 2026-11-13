@@ -1,20 +1,23 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import WeedCompass from '../components/WeedCompass.tsx';
-import { CATEGORIES, type Category, type Mode, type PricedItem, type UserProfile } from '@gib/shared';
+import { CATEGORIES, distanceChoices, fmtDistance, type Category, type Mode, type PricedItem, type UserProfile } from '@gib/shared';
 import { api } from '../api.ts';
 import DealCard from '../components/DealCard.tsx';
 import RefreshBar from '../components/RefreshBar.tsx';
 import MapView from '../components/MapView.tsx';
+import { snapTo, useRegion } from '../region.ts';
 import { ACCENT, Chips, EmptyState, MilesSelect, OpenNowToggle, Segmented, VIEWS, pref, type PlaceView } from '../components/Place.tsx';
 
-const DISTANCES = [5, 10, 15, 20, 30, 50];
+const DISTANCES_MI = [5, 10, 15, 20, 30, 50], DISTANCES_KM = [5, 10, 20, 30, 50, 80];
 const CATEGORY_CHIPS = CATEGORIES.map((c) => [c.id, c.label] as const);
 const MODES = [['pickup', 'Pickup'], ['delivery', 'Delivery']] as const;
 
 export default function DealsPage({ profile, onProfile, top }: { profile: UserProfile; onProfile: (p: UserProfile) => void; top?: ReactNode }) {
   const [category, setCategory] = useState<Category>(() => (pref.get('gib.cat') as Category) || 'flower');
   const [mode, setMode] = useState<Mode>(() => (pref.get('gib.mode') as Mode) || 'pickup');
-  const [maxMiles, setMaxMiles] = useState(profile.radiusMiles);
+  const region = useRegion();
+  const choices = distanceChoices(region.units, DISTANCES_MI, DISTANCES_KM);
+  const [maxMiles, setMaxMiles] = useState(() => snapTo(profile.radiusMiles, choices));
   const [openNow, setOpenNow] = useState(() => pref.get('gib.open') !== '0');
   const [search, setSearch] = useState('');
   const [view, setView] = useState<PlaceView>(() => (pref.get('gib.view') as PlaceView) || 'list');
@@ -63,7 +66,7 @@ export default function DealsPage({ profile, onProfile, top }: { profile: UserPr
         <Chips accent="weed" items={CATEGORY_CHIPS} value={category} onChange={setCategory} />
         <div className="flex flex-wrap items-center gap-2 px-4 pb-3 text-sm">
           <Segmented items={MODES} value={mode} onChange={setMode} />
-          {mode === 'pickup' && <MilesSelect value={maxMiles} options={DISTANCES} onChange={setMaxMiles} />}
+          {mode === 'pickup' && <MilesSelect value={maxMiles} choices={choices} onChange={setMaxMiles} />}
           <OpenNowToggle value={openNow} onChange={setOpenNow} />
           <label className="flex items-center gap-1 text-zinc-300">
             <input type="checkbox" checked={onePerStore} onChange={(e) => setOnePerStore(e.target.checked)} /> 1 per store
@@ -78,7 +81,7 @@ export default function DealsPage({ profile, onProfile, top }: { profile: UserPr
       {!shown && !error && <p className="p-6 text-zinc-400">Loading deals…</p>}
       {shown && shown.length === 0 && (
         <EmptyState accent="weed" openNow={openNow} onShowClosed={() => setOpenNow(false)}>
-          No {mode} results{openNow ? ' open right now' : ''} for this category{mode === 'pickup' ? ` within ${maxMiles} mi` : ''}.
+          No {mode} results{openNow ? ' open right now' : ''} for this category{mode === 'pickup' ? ` within ${fmtDistance(maxMiles, region.units, 0)}` : ''}.
           {openNow ? ' The deals will still be there in the morning.' : ' Try a wider distance or another category.'}
         </EmptyState>
       )}
@@ -87,7 +90,7 @@ export default function DealsPage({ profile, onProfile, top }: { profile: UserPr
       {shown && shown.length > 0 && view === 'compass' && <WeedCompass items={shown} profile={profile} startStoreId={compassStore} />}
       {shown && shown.length > 0 && view === 'list' && (
         <div className="p-3 space-y-3">
-          <p className="text-xs text-zinc-500 px-1">{shown.length} deals · {storeCount} {storeCount === 1 ? 'store' : 'stores'}{openNow ? ' open now' : ''} · from ZIP {profile.homeZip}</p>
+          <p className="text-xs text-zinc-500 px-1">{shown.length} deals · {storeCount} {storeCount === 1 ? 'store' : 'stores'}{openNow ? ' open now' : ''} · from {region.codeName} {profile.homeZip}</p>
           <ul className="space-y-3">
             {shown.map((item, i) => (
               <li key={`${item.product.id}`}><DealCard item={item} rank={i + 1} onVisited={markVisited} onPointMe={() => pointAt(item.store.id)} /></li>

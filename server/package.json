@@ -10,6 +10,7 @@
     "test": "vitest run",
     "typecheck": "tsc -p .",
     "beer": "tsx src/cli-beer.ts",
+    "athens": "tsx src/cli-athens.ts",
     "publish-data": "tsx src/publish.ts"
   },
   "dependencies": {

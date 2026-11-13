@@ -192,7 +192,7 @@ export interface PricedItem {
 }
 
 export interface SourceStatus {
-  source: SourceId | 'osm' | 'bar-websites';
+  source: SourceId | 'osm' | 'bar-websites' | 'athens-places' | 'athens-menus';
   ok: boolean;
   stores: number;
   products: number;
@@ -209,3 +209,5 @@ export interface RefreshStatus {
 }
 export * from './beer.ts';
 export * from './badges.ts';
+export * from './areas.ts';
+export * from './athens-postcodes.ts';

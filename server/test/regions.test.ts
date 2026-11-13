@@ -1,0 +1,159 @@
+import { describe, expect, it } from 'vitest';
+import { AREAS, ATHENS_POSTCODES, MAX_RESULT_MILES, SD_ZIPS, distanceChoices, fmtDistance, fmtNear, regionAt, regionOf, type Product, type Store } from '@gib/shared';
+import { DEFAULT_PROFILE } from '../src/db.ts';
+import { openState } from '../src/hours.ts';
+import { ouncesOf, rankVenues } from '../src/beer/rank.ts';
+import { loadSeed, mergeBeerStatus } from '../src/beer/refresh.ts';
+import { dedupe } from '../src/beer/osm.ts';
+import { haversineMiles, rankItems } from '../src/pricing/engine.ts';
+
+describe('area codes', () => {
+  it('San Diego ZIPs are under the U.S. tab, Athens postcodes under Europe', () => {
+    expect(Object.keys(SD_ZIPS).every((z) => AREAS[z].region === 'us')).toBe(true);
+    expect(Object.keys(ATHENS_POSTCODES).every((z) => AREAS[z].region === 'europe')).toBe(true);
+    expect(Object.keys(AREAS)).toHaveLength(Object.keys(SD_ZIPS).length + Object.keys(ATHENS_POSTCODES).length);
+  });
+  it('Athens postcodes look right and sit in greater Athens', () => {
+    const codes = Object.entries(ATHENS_POSTCODES);
+    expect(codes.length).toBeGreaterThan(200);
+    const syntagma = { lat: 37.9755, lng: 23.7348 };
+    for (const [code, a] of codes) {
+      expect(code).toMatch(/^1[0-8]\d \d{2}$/);
+      expect(a.area).toMatch(/^[\x20-\x7e]+$/); // readable in Latin letters
+      expect(haversineMiles(syntagma.lat, syntagma.lng, a.lat, a.lng)).toBeLessThan(18);
+    }
+    expect(ATHENS_POSTCODES['105 58']).toMatchObject({ area: 'Plaka', city: 'Athens' });
+    expect(ATHENS_POSTCODES['106 76']).toMatchObject({ area: 'Kolonaki', city: 'Athens' });
+  });
+  it('regionOf', () => {
+    expect(regionOf('92122')).toMatchObject({ id: 'us', currency: 'USD', units: 'mi', weedLegal: true });
+    expect(regionOf('105 58')).toMatchObject({ id: 'europe', city: 'Athens', currency: 'EUR', units: 'km', weedLegal: false });
+    expect(regionOf(undefined).id).toBe('us');
+    expect(regionOf('nope').id).toBe('us');
+  });
+});
+
+describe('units', () => {
+  it('miles in the U.S., kilometres in Europe', () => {
+    expect(fmtDistance(4.3, 'mi')).toBe('4.3 mi');
+    expect(fmtDistance(4.3, 'km')).toBe('6.9 km');
+    expect(fmtNear(0.05, 'mi')).toBe('264 ft');
+    expect(fmtNear(0.2, 'km')).toBe('322 m');
+    expect(fmtNear(20, 'km')).toBe('32 km');
+    const km = distanceChoices('km', [1], [1, 5]);
+    expect(km.map(([, label]) => label)).toEqual(['≤ 1 km', '≤ 5 km']);
+    expect(km[1][0]).toBeCloseTo(3.107, 3); // stored in miles
+  });
+});
+
+describe('beer in Athens', () => {
+  it('Greek public holidays apply to places in Greece', () => {
+    const athens = { lat: 37.97, lng: 23.73 };
+    const easterMonday2026 = new Date(2026, 3, 13, 14); // Greek Orthodox Easter Monday
+    expect(openState('Mo-Su 10:00-23:00; PH off', easterMonday2026, athens).isOpen).toBe(false);
+    expect(openState('Mo-Su 10:00-23:00; PH off', easterMonday2026).isOpen).toBe(true); // not a U.S. holiday
+  });
+  it('bars in Greece are judged on Athens time, wherever the phone is', () => {
+    const bar = { id: 'osm:2', name: 'Μπυραρία', kind: 'bar' as const, lat: 37.97, lng: 23.73, source: 'osm' as const, openingHours: 'Mo-Su 18:00-02:00' };
+    const instant = new Date('2026-11-13T17:33:00Z'); // 7:33 PM in Athens, 9:33 AM in San Diego
+    const phoneInSanDiego = new Date(2026, 10, 13, 9, 33);
+    const [r] = rankVenues({ lat: 37.97, lng: 23.73 }, [bar], [], [], phoneInSanDiego, instant);
+    expect(r).toMatchObject({ isOpen: true, hoursLabel: 'Open until 2 AM' });
+  });
+  it('Greek names are not merged as duplicates', () => {
+    const v = (id: string, name: string) => ({ id, name, kind: 'bar' as const, lat: 37.97, lng: 23.73, source: 'osm' as const });
+    expect(dedupe([v('a', 'Θέσις 7'), v('b', 'Μπυραρία'), v('c', 'Μπυραρία')]).map((x) => x.id)).toEqual(['a', 'b']);
+  });
+  it('euro prices stay euros', () => {
+    const venue = { id: 'osm:1', name: 'Bar', kind: 'bar' as const, lat: 37.97, lng: 23.73, source: 'osm' as const };
+    const price = { id: 'u1', venueId: 'osm:1', item: 'Mythos', price: 4.5, currency: 'EUR' as const, kind: 'regular' as const, source: 'user' as const, reportedAt: new Date().toISOString() };
+    const [r] = rankVenues({ lat: 37.97, lng: 23.73 }, [venue], [price], []);
+    expect(r.best).toMatchObject({ price: 4.5, currency: 'EUR' });
+  });
+});
+
+describe('metric sizes', () => {
+  it('ml / cl / l', () => {
+    expect(ouncesOf('500ml')).toBeCloseTo(16.91, 2);
+    expect(ouncesOf('330ml')).toBeCloseTo(11.16, 2);
+    expect(ouncesOf('33cl')).toBeCloseTo(11.16, 2);
+    expect(ouncesOf('0,5 L')).toBeCloseTo(16.91, 2);
+    expect(ouncesOf('6-pack 330ml')).toBeCloseTo(66.96, 1);
+    expect(ouncesOf('pint')).toBe(16);
+    expect(ouncesOf('12oz')).toBe(12);
+  });
+});
+
+describe('Athens deals in beer-seed.json', () => {
+  it('every entry finds its place, in euros, with a source link and the date checked', () => {
+    const places = [
+      { id: 'osm:node/4460648896', name: 'Barrett', kind: 'bar' as const, lat: 37.9780769, lng: 23.7256085, source: 'osm' as const },
+      { id: 'osm:node/5642451768', name: 'Tapfield', kind: 'bar' as const, lat: 37.9781445, lng: 23.7232344, source: 'osm' as const },
+      { id: 'osm:node/11467013291', name: 'Padre', kind: 'bar' as const, lat: 37.9868458, lng: 23.733974, source: 'osm' as const },
+      { id: 'osm:node/1', name: 'Barrett', kind: 'bar' as const, lat: 32.7, lng: -117.1, source: 'osm' as const }, // a namesake in San Diego
+    ];
+    const seed = loadSeed(places);
+    const athens = seed.prices.filter((p) => p.currency === 'EUR');
+    expect(athens.length).toBeGreaterThanOrEqual(9);
+    for (const p of athens) {
+      expect(p.sourceUrl).toMatch(/^https:\/\//);
+      expect(p.snippet).toBeTruthy();
+      expect(p.reportedAt).toBe('2026-11-13T12:00:00.000Z');
+      expect(p.venueId).not.toBe('osm:node/1');
+    }
+    expect(seed.venues.map((v) => v.name)).toEqual(expect.arrayContaining(['Berlin by 5 Drunkmen', 'Hard Rock Cafe Athens']));
+    expect(seed.happyHours.map((h) => `${h.start}-${h.end}`)).toEqual(['16:00-18:00', '22:00-23:00']);
+  });
+});
+
+describe('San Diego and Athens stay apart', () => {
+  const plaka = AREAS['105 58'], uc = AREAS['92122'];
+  const bar = (id: string, lat: number, lng: number) => ({ id, name: id, kind: 'bar' as const, lat, lng, source: 'osm' as const });
+  const sdBar = bar('sd', 32.85, -117.2), athensBar = bar('ath', 37.976, 23.726), oceanside = bar('far-sd', 33.2, -117.38), lasVegas = bar('vegas', 36.17, -115.14);
+  it('beer: nothing more than 100 mi from the home area code', () => {
+    const all = [sdBar, athensBar, oceanside, lasVegas];
+    // Home in Athens, even if the search point is San Diego: only Athens bars, never San Diego ones.
+    expect(rankVenues({ lat: uc.lat, lng: uc.lng, home: plaka }, all, [], []).map((r) => r.venue.id)).toEqual(['ath']);
+    expect(rankVenues({ lat: plaka.lat, lng: plaka.lng, home: plaka }, all, [], []).map((r) => r.venue.id)).toEqual(['ath']);
+    // Home in San Diego: San Diego County yes, Las Vegas (~250 mi) and Athens no.
+    expect(rankVenues({ lat: uc.lat, lng: uc.lng, home: uc }, all, [], []).map((r) => r.venue.id).sort()).toEqual(['far-sd', 'sd']);
+    expect(MAX_RESULT_MILES).toBe(100);
+  });
+  it('weed: no store more than 100 mi from home, delivery included', () => {
+    const store = (id: string, lat: number, lng: number): Store => ({ id, name: id, address: '1 Main St', city: 'X', lat, lng, sources: [{ source: 'sample', externalId: id }],
+      pickup: true, ownSitePickup: null, taxIncluded: true, delivery: [{ via: 'store', fee: 0, minimum: 0 }] });
+    const product = (storeId: string): Product => ({ id: `${storeId}:p`, storeId, source: 'sample', name: 'Blue Dream 3.5g', category: 'flower', grams: 3.5, price: 30 });
+    const stores = new Map([['near', store('near', 32.86, -117.2)], ['vegas', store('vegas', 36.17, -115.14)]]);
+    const products = [product('near'), product('vegas')];
+    for (const mode of ['pickup', 'delivery'] as const) {
+      expect(rankItems(products, stores, [], new Map(), DEFAULT_PROFILE, { mode, maxMiles: 500 }).map((i) => i.store.id)).toEqual(['near']);
+    }
+  });
+  it('Athens prices are always euros; a dollar price on a Greek website is dropped', () => {
+    const p = (id: string, price: number, currency?: 'EUR') => ({ id, venueId: 'ath', item: 'Draft', price, ...(currency ? { currency } : {}), kind: 'regular' as const, source: 'website' as const, reportedAt: '2026-11-13' });
+    const [r] = rankVenues({ lat: plaka.lat, lng: plaka.lng, home: plaka }, [athensBar], [p('usd', 3), p('eur', 5, 'EUR')], []);
+    expect(r.prices.map((x) => x.id)).toEqual(['eur']);
+    expect(r.best).toMatchObject({ price: 5, currency: 'EUR' });
+    expect(regionAt(athensBar).currency).toBe('EUR');
+    expect(regionAt(sdBar).currency).toBe('USD');
+  });
+});
+
+describe('separate daily refreshes: San Diego ($) and Athens (€)', () => {
+  const line = (source: any, finishedAt: string, ok = true) => ({ source, ok, stores: 1, products: 1, finishedAt });
+  const prev = { running: false, lastRefreshAt: '2026-11-13T14:00:00Z', sources: [line('osm', '2026-11-13T14:00:00Z'), line('bar-websites', '2026-11-13T14:01:00Z'), line('athens-places', '2026-11-13T05:00:00Z'), line('athens-menus', '2026-11-13T05:01:00Z')] };
+  it("Athens' refresh replaces only Athens' status lines", () => {
+    const next = mergeBeerStatus(prev, 'europe', [line('athens-places', '2026-11-14T05:00:00Z'), line('athens-menus', '2026-11-14T05:02:00Z', false)], false);
+    expect(next.sources.find((s) => s.source === 'osm')!.finishedAt).toBe('2026-11-13T14:00:00Z');
+    expect(next.sources.find((s) => s.source === 'bar-websites')!.ok).toBe(true);
+    expect(next.sources.find((s) => s.source === 'athens-menus')).toMatchObject({ ok: false, finishedAt: '2026-11-14T05:02:00Z' });
+    expect(next.sources).toHaveLength(4);
+  });
+  it("San Diego's refresh leaves Athens alone", () => {
+    const next = mergeBeerStatus(prev, 'us', [line('osm', '2026-11-14T14:00:00Z'), line('bar-websites', '2026-11-14T14:03:00Z')], false);
+    expect(next.sources.filter((s) => s.source.startsWith('athens')).map((s) => s.finishedAt)).toEqual(['2026-11-13T05:00:00Z', '2026-11-13T05:01:00Z']);
+  });
+  it('starting a refresh only marks it running', () => {
+    expect(mergeBeerStatus(prev, 'us', null, true)).toMatchObject({ running: true, sources: prev.sources });
+  });
+});

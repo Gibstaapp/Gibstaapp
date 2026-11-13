@@ -36,6 +36,9 @@ Two developers each work with their own Claude Code on this repo. Use a branch +
   - Shared look for both sides (cards, filter bar, open badge, logo, accent colors): `components/Place.tsx`. Weed = green, beer = amber. Build new UI from these so the two sides stay identical.
   - Compass closeness indicator (burn mark / sloshing beer): `compass/Heat.tsx`, animations in `index.css`.
   - Badges: rules in `shared/badges.ts`, phone storage in `web/src/badges.ts`, `pages/BadgesPage.tsx`, `components/BadgeParty.tsx`.
+- **Regions / area codes:** `shared/areas.ts` (U.S. = San Diego, Europe = Athens: currency, units, weedLegal, time zone), Athens list in `shared/athens-postcodes.ts` (generated from OpenStreetMap, see `scripts/athens-postcodes/`). Web gets the region from `web/src/region.ts` (`useRegion`). Never hard-code `$` or `mi` in new UI: use `fmtDistance` / `CURRENCY_SYMBOL`.
+- **Launch cities** in the daily beer data: `LAUNCH_AREAS` in `server/src/beer/refresh.ts`.
+- **Two separate daily beer refreshes:** San Diego (`refreshBeer({ region: 'us' })`, dollars, status lines `osm` + `bar-websites`) and Athens (`region: 'europe'`, euros, `athens-places` + `athens-menus`). Each at 7 AM local time on the PC (`scheduler.ts`); on GitHub the morning run does both and a separate 7 AM Athens run uses `REFRESH=athens`. One city's refresh never touches the other's data or status (`mergeBeerStatus`). `npm run beer -w server -- --region europe` runs one.
 - **Opening hours (both sides):** `server/src/hours.ts` (open now, closing soon, Weedmaps hours -> opening_hours text, time zones).
 - **Shared types:** `shared/types.ts`, `shared/beer.ts`, `shared/badges.ts`.
 - **Prototype:** `BeerFinder/` is the original Kotlin + Python beer prototype, kept for reference only. Not built or run.
@@ -55,6 +58,8 @@ Two developers each work with their own Claude Code on this repo. Use a branch +
 - **Windows Git Bash:** `sed`, heredocs and `node -e` one-liners mangle regex `\b` (it becomes a backspace) and backticks / `${}`. Edit regex-heavy or template-literal code with the Edit tool.
 - **Times:** the server runs in Pacific time. Beer queries send `tzOffset`, so open/closed and happy hours use the phone's local time.
   Weed store hours are always judged on San Diego time (`wallClockIn`). Tests pin the time zone in `server/vitest.config.ts`.
+- **Athens prices** go in `server/beer-seed.json` only from the bar's own menu (website or its Untappd menu), with `currency: 'EUR'`, `url`, `date` and the original text as `note`. Never from blogs or reviews. A separate daily step, `refreshAthensMenus` (status "Athens bar menus (€)", `npm run athens -w server`), reads Athens bars' own websites with `parseEuroPrices`; Untappd is never read automatically.
+- **100-mile rule:** nothing farther than `MAX_RESULT_MILES` (100) from the home area code is ever shown, weed or beer. Prices must be in the place's own currency (`regionAt`), so Athens is always €.
 - **Beer price parsing** is strict on purpose (`server/test/accuracy.test.ts` holds real snippets that used to produce wrong prices). Add the snippet as a test when you find a new bad one.
 - **Weed sources** (Weedmaps/Eaze) scrape with Playwright and are fragile. A failed source keeps its previous data.
 - Don't commit anything under `server/data/`, `tools/`, APKs or logs.

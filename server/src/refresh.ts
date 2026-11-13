@@ -1,5 +1,8 @@
 import type { RefreshStatus, SourceStatus } from '@gib/shared';
-import { repo } from './db.ts';
+import { repo, DEFAULT_PROFILE } from './db.ts';
+import { regionOf } from '@gib/shared';
+
+const DEFAULT_PROFILE_AREA = { homeZip: DEFAULT_PROFILE.homeZip, lat: DEFAULT_PROFILE.lat, lng: DEFAULT_PROFILE.lng, radiusMiles: DEFAULT_PROFILE.radiusMiles };
 import { config } from './config.ts';
 import { mergeResults } from './normalize.ts';
 import type { SourceAdapter, SourceResult } from './sources/types.ts';
@@ -31,7 +34,9 @@ export function refreshAll(): Promise<RefreshStatus> {
   current = (async () => {
     const prev = repo.refreshStatus();
     repo.setRefreshStatus({ ...prev, running: true });
-    const profile = repo.profile();
+    // Weed menus are scraped around San Diego; if the saved home is somewhere weed isn't legal, scrape San Diego anyway.
+    const saved = repo.profile();
+    const profile = regionOf(saved.homeZip).weedLegal ? saved : { ...saved, ...DEFAULT_PROFILE_AREA };
     const area = { lat: profile.lat, lng: profile.lng, radiusMiles: profile.radiusMiles, zip: profile.homeZip };
     const enabled = ADAPTERS.filter((a) => a.enabled());
 

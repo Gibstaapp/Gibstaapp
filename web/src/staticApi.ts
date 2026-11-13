@@ -10,10 +10,10 @@ import type { BeerPrice, BeerQuery, BeerReport, BeerVenue, Category, HappyHour, 
 import { rankItems, effectiveStore, haversineMiles } from '../../server/src/pricing/engine.ts';
 import { rankVenues } from '../../server/src/beer/rank.ts';
 import { fetchOsmVenues } from '../../server/src/beer/osm.ts';
-import { SD_ZIPS } from '../../server/src/zips.ts';
+import { AREAS, regionOf } from '@gib/shared';
 
 interface WeedSnapshot { stores: Store[]; products: import('@gib/shared').Product[]; deals: import('@gib/shared').Deal[]; status: RefreshStatus }
-interface BeerSnapshot { venues: BeerVenue[]; prices: BeerPrice[]; happyHours: HappyHour[]; status: RefreshStatus; area: { lat: number; lng: number; miles: number } }
+interface BeerSnapshot { venues: BeerVenue[]; prices: BeerPrice[]; happyHours: HappyHour[]; status: RefreshStatus; area: { lat: number; lng: number; miles: number }; areas?: { lat: number; lng: number; miles: number }[] }
 
 const BASE = import.meta.env.BASE_URL; // "/Gibstaapp/"
 const DEFAULT_PROFILE: UserProfile = {
@@ -37,7 +37,7 @@ const beer = () => (beerP ??= getJson<BeerSnapshot>('beer.json').catch((e) => { 
 // ---------- profile (all on this phone) ----------
 function profile(): UserProfile {
   const p = { ...DEFAULT_PROFILE, ...load<Partial<UserProfile>>('gib.personal', {}) };
-  const z = SD_ZIPS[p.homeZip];
+  const z = AREAS[p.homeZip];
   if (z) { p.lat = z.lat; p.lng = z.lng; }
   return p;
 }
@@ -50,7 +50,7 @@ const inflight = new Map<string, Promise<void>>();
 async function ensureArea(snap: BeerSnapshot, lat: number, lng: number, wantMiles: number): Promise<string | null> {
   const need = Math.min(wantMiles, 15);
   const covers = (a: { lat: number; lng: number; miles: number }) => haversineMiles(a.lat, a.lng, lat, lng) + need <= a.miles;
-  if ((snap.venues.length > 0 && covers(snap.area)) || areas.some(covers)) return null; // empty daily file = load places in the browser
+  if ((snap.venues.length > 0 && [snap.area, ...(snap.areas ?? [])].some(covers)) || areas.some(covers)) return null; // empty daily file = load places in the browser
   const key = `${lat.toFixed(2)},${lng.toFixed(2)}`;
   if (!inflight.has(key)) {
     const miles = Math.min(25, Math.max(10, wantMiles + 3));
@@ -58,7 +58,7 @@ async function ensureArea(snap: BeerSnapshot, lat: number, lng: number, wantMile
   }
   try {
     await inflight.get(key);
-    return 'New area: places come from OpenStreetMap. Happy hours/prices are only checked daily for San Diego, so most places here show "No price yet".';
+    return 'New area: places come from OpenStreetMap. Happy hours/prices are only checked daily for San Diego and Athens, so most places here show "No price yet".';
   } catch (e) {
     return `Couldn't load places here right now (${(e as Error).message}). Try again in a minute.`;
   }
@@ -69,8 +69,9 @@ const reports = () => load<BeerPrice[]>('gib.beerReports', []);
 export const staticApi = {
   auth: async (_pass: string) => ({ ok: true }),
   items: async (p: { category?: Category; mode: Mode; maxMiles?: number; search?: string; openNow?: boolean }): Promise<PricedItem[]> => {
-    const s = await weed();
     const prof = profile();
+    if (!regionOf(prof.homeZip).weedLegal) return []; // no legal shops to show there
+    const s = await weed();
     return rankItems(s.products, new Map(s.stores.map((x) => [x.id, x])), s.deals, overrides(), prof,
       { category: p.category, mode: p.mode, maxMiles: p.maxMiles ?? prof.radiusMiles, search: p.search, openNow: p.openNow, limit: 200 }).slice(0, 200);
   },
@@ -88,7 +89,7 @@ export const staticApi = {
   },
   profile: async () => profile(),
   saveProfile: async (p: Partial<UserProfile>): Promise<UserProfile> => {
-    if (p.homeZip && !SD_ZIPS[p.homeZip]) throw new Error(`Unknown ZIP ${p.homeZip}. Supported: San Diego County ZIPs.`);
+    if (p.homeZip && !AREAS[p.homeZip]) throw new Error(`Unknown area code ${p.homeZip}. Pick one from the list.`);
     save('gib.personal', { ...profile(), ...p });
     return profile();
   },
@@ -100,7 +101,7 @@ export const staticApi = {
     return profile();
   },
   publicUrl: async () => ({ url: location.origin + BASE }),
-  zips: async () => SD_ZIPS,
+  zips: async () => AREAS,
   status: async (): Promise<RefreshStatus> => ({ ...(await weed()).status, running: false }),
   refresh: async (): Promise<RefreshStatus> => {
     const st = (await weed()).status;
@@ -129,6 +130,7 @@ export const staticApi = {
       if (!r.item?.trim() || !(price > 0 && price < 100)) throw new Error('Need a beer name and a price');
       const p: BeerPrice = {
         id: `user:${crypto.randomUUID()}`, venueId: r.venueId, item: r.item.trim().slice(0, 60), price: Math.round(price * 100) / 100,
+        ...(r.currency === 'EUR' ? { currency: 'EUR' as const } : {}), // set from the place's location by the report form
         size: r.size, kind: r.kind, days: r.days, start: r.start, end: r.end, source: 'user', snippet: r.note?.trim() || undefined,
         reportedAt: new Date().toISOString(),
       };

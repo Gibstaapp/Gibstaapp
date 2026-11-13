@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
-import type { OpenStatus } from '@gib/shared';
+import { fmtDistance, type OpenStatus } from '@gib/shared';
+import { useRegion } from '../region.ts';
 
 /**
  * Pieces shared by the weed and beer screens so both look the same:
@@ -49,6 +50,7 @@ export function PlaceHeader({ accent, rank, icon, name, distanceMiles, address, 
   unit?: string;
   priceNote?: ReactNode;
 }) {
+  const { units } = useRegion();
   return (
     <div className="flex items-start justify-between gap-3">
       <div className="min-w-0 space-y-0.5">
@@ -57,7 +59,7 @@ export function PlaceHeader({ accent, rank, icon, name, distanceMiles, address, 
           <h3 className="font-semibold truncate">{icon ? `${icon} ` : ''}{name}</h3>
         </div>
         <p className="text-xs text-zinc-400 truncate">
-          {[distanceMiles != null ? `${distanceMiles.toFixed(1)} mi` : '', address].filter(Boolean).join(' · ')}
+          {[distanceMiles != null ? fmtDistance(distanceMiles, units) : '', address].filter(Boolean).join(' · ')}
         </p>
         <p className="text-xs"><OpenBadge s={open} /></p>
       </div>
@@ -96,10 +98,11 @@ export function Segmented<T extends string>({ items, value, onChange }: { items:
   );
 }
 
-export function MilesSelect({ value, options, onChange }: { value: number; options: number[]; onChange: (n: number) => void }) {
+/** Distance filter. `choices` are [miles, label] in the region's units (see distanceChoices); the value is always miles. */
+export function MilesSelect({ value, choices, onChange }: { value: number; choices: [number, string][]; onChange: (n: number) => void }) {
   return (
     <select value={value} onChange={(e) => onChange(Number(e.target.value))} className="bg-zinc-900 border border-zinc-700 rounded-lg px-2 py-1">
-      {options.map((d) => <option key={d} value={d}>≤ {d} mi</option>)}
+      {choices.map(([m, label]) => <option key={m} value={m}>{label}</option>)}
     </select>
   );
 }

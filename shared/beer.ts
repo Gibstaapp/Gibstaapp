@@ -24,7 +24,8 @@ export interface BeerPrice {
   id: string;
   venueId: string;
   item: string;             // "Draft pints", "Modelo 24oz can", "Pliny the Elder"
-  price: number;            // dollars
+  price: number;            // in `currency`
+  currency?: 'USD' | 'EUR'; // missing = USD (San Diego data)
   size?: string;            // "pint", "16oz", "6-pack"
   kind: BeerPriceKind;
   /** When this price applies. Missing = any time the venue is open. */
@@ -74,12 +75,15 @@ export interface BeerQuery {
   sort?: BeerSort;
   maxMiles?: number;
   limit?: number;
+  /** Home area code location: places more than MAX_RESULT_MILES from it are never returned. */
+  home?: { lat: number; lng: number };
 }
 
 export interface BeerReport {
   venueId: string;
   item: string;
   price: number;
+  currency?: 'USD' | 'EUR';
   size?: string;
   kind: BeerPriceKind;
   days?: number[];

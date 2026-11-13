@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Store } from '@gib/shared';
 import { checkIn, earnedBadges, placeBadge, visitsToNext, type VisitLog } from '@gib/shared';
-import { parsePrices } from '../src/beer/extract.ts';
+import { parseEuroPrices, parsePrices } from '../src/beer/extract.ts';
 import { mergeResults, parseGrams } from '../src/normalize.ts';
 import { repairPackWeight } from '../src/sanitize.ts';
 
@@ -99,5 +99,27 @@ describe('badges', () => {
     let log: VisitLog = {};
     for (let i = 0; i < 5; i++) log = checkIn(log, { id: `s${i}`, name: `Shop ${i}`, side: 'weed' }, '2026-11-13').log;
     expect(earnedBadges(log).map((b) => b.title)).toEqual(['Trailblazer']);
+  });
+});
+
+describe('euro prices (Athens bar websites)', () => {
+  const eu = (text: string, hh = false) => parseEuroPrices(text, hh).map((p) => `${p.item} | ${p.size ?? '-'} | €${p.price}`);
+  it('menu lines in English and Greek, with sizes and decimal commas', () => {
+    expect(eu('Draft\nMythos 500ml\n\n5% vol – \n\n4.00€\nFix 400ml\n\n5% vol – \n\n3.50€')).toEqual(['Mythos | 500ml | €4', 'Fix | 400ml | €3.5']);
+    expect(eu('Μπύρα βαρέλι 0,5L 5,50 €')).toEqual(['Μπύρα βαρέλι | 500ml | €5.5']);
+    expect(eu('Amstel 33cl €4')).toEqual(['Amstel | 330ml | €4']);
+  });
+  it('happy-hour style "€4 draft beers"', () => {
+    expect(eu('HAPPY HOUR 18:00-21:00 €4 draft beers and €6 cocktails', true)).toEqual(['Draft beers | - | €4']);
+    expect(eu('Happy hour: 5€ μπύρα βαρέλι, 7€ ποτό', true)).toEqual(['Μπύρα βαρέλι | - | €5']);
+  });
+  it('skips wine, cocktails, food combos, and two-price lines where the size is unclear', () => {
+    expect(eu('Κρασί ποτήρι 6 € Κοκτέιλ 9€ Gin tonic 9€')).toEqual([]);
+    expect(eu('Burger & beer 14€')).toEqual([]);
+    expect(eu('Draft Beers 330ml / 500ml Nymfi (5 Hops Lager - Greece) 4€ / 5€')).toEqual([]);
+    expect(eu('Ginger beer 4€')).toEqual([]);
+    // From Barrett's real menu: a whiskey called "IPA Edition", under the whiskey heading.
+    expect(eu('whiskey Jameson Irish Whiskey 8€ Jameson Black Barrel 10€ Jameson IPA Edition 10€')).toEqual([]);
+    expect(eu('(3.42)\n\n440ml Can\n8.70 EUR')).toEqual([]);
   });
 });

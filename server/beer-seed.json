@@ -1,11 +1,13 @@
 {
   "_readme": [
     "Hand-entered beer deals and places, committed to git so we can both add to it.",
-    "Use this for deals we've seen in person, on a chalkboard, on Instagram, or got from the owner.",
-    "Match a place by its exact name (as shown in the app) plus 'near' [lat, lng], or by 'venueId' (shown in the app's place details).",
-    "kind: regular | happy_hour | game_day | special. days: 0=Sun..6=Sat. start/end: 24h 'HH:MM'.",
-    "game_day deals also need team 'Padres' and gameDayRule 'game_day' (any day they play) or 'after_win' (day after a win).",
-    "source 'team' = we confirmed it with the bar ourselves (shows a 'Verified' badge).",
+    "Use this for deals we've seen in person, on a chalkboard, on Instagram, got from the owner, or read on the bar's OWN menu (website or the menu it keeps on Untappd).",
+    "Never a blog, review or travel guide: those prices are secondhand and go stale.",
+    "Match a place by its exact name (as shown in the app) plus 'near' [lat, lng] (must be within 1 mile), or by 'venueId'.",
+    "kind: regular | happy_hour | special. days: 0=Sun..6=Sat. start/end: 24h 'HH:MM'. size: 'pint', '16oz', '500ml', '6-pack'...",
+    "currency: 'EUR' for Europe (default is dollars). url: where the price was read. date: when we checked it. note: the original text.",
+    "source 'team' = we confirmed it with the bar ourselves (shows a 'Verified' badge); otherwise it shows 'From their menu'.",
+    "happyHours: windows without a fixed price (e.g. '2nd drink 75% off'), same matching fields plus days/start/end/note/url.",
     "Delete the example entries below once we have real ones; they're marked 'example': true and ignored."
   ],
   "venues": [
@@ -17,22 +19,227 @@
       "lng": -117.1611,
       "address": "123 Example St, San Diego",
       "openingHours": "Mo-Su 11:00-24:00"
+    },
+    {
+      "name": "Berlin by 5 Drunkmen",
+      "kind": "bar",
+      "lat": 37.9679,
+      "lng": 23.7512,
+      "address": "Timotheou 8, Athens",
+      "website": "http://www.berlinby5drunkmen.gr",
+      "openingHours": "Mo-Th,Su 18:30-01:00; Fr,Sa 18:30-01:30"
+    },
+    {
+      "id": "seed:hardrockcafeathens",
+      "name": "Hard Rock Cafe Athens",
+      "kind": "bar",
+      "lat": 37.9756,
+      "lng": 23.7253,
+      "address": "Adrianou 52, Monastiraki, Athens",
+      "website": "https://cafe.hardrock.com/athens/"
     }
   ],
   "prices": [
     {
       "example": true,
       "name": "Example Taproom",
-      "near": [32.7157, -117.1611],
+      "near": [
+        32.7157,
+        -117.1611
+      ],
       "item": "Draft pints",
       "price": 5,
       "size": "pint",
       "kind": "happy_hour",
-      "days": [1, 2, 3, 4, 5],
+      "days": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
       "start": "15:00",
       "end": "18:00",
       "source": "team",
       "note": "Owner confirmed in person"
+    },
+    {
+      "name": "Barrett",
+      "near": [
+        37.9781,
+        23.7256
+      ],
+      "url": "https://www.barrett-athens.gr/menu.html",
+      "item": "Nymfi lager (draft)",
+      "price": 4,
+      "size": "330ml",
+      "currency": "EUR",
+      "kind": "regular",
+      "source": "seed",
+      "date": "2026-11-13",
+      "note": "Draft Beers 330ml / 500ml: Nymfi (5 Hops Lager - Greece) 4€ / 5€"
+    },
+    {
+      "name": "Barrett",
+      "near": [
+        37.9781,
+        23.7256
+      ],
+      "url": "https://www.barrett-athens.gr/menu.html",
+      "item": "Nymfi lager (draft)",
+      "price": 5,
+      "size": "500ml",
+      "currency": "EUR",
+      "kind": "regular",
+      "source": "seed",
+      "date": "2026-11-13",
+      "note": "Draft Beers 330ml / 500ml: Nymfi (5 Hops Lager - Greece) 4€ / 5€"
+    },
+    {
+      "name": "Barrett",
+      "near": [
+        37.9781,
+        23.7256
+      ],
+      "url": "https://www.barrett-athens.gr/menu.html",
+      "item": "Fischer pilsner (draft)",
+      "price": 5,
+      "size": "500ml",
+      "currency": "EUR",
+      "kind": "regular",
+      "source": "seed",
+      "date": "2026-11-13",
+      "note": "Draft Beers 330ml / 500ml: Fischer (Classic Pilsner - France) 4€ / 5€"
+    },
+    {
+      "name": "Tapfield",
+      "near": [
+        37.9781,
+        23.7232
+      ],
+      "url": "https://untappd.com/v/tapfield/10079591",
+      "item": "Koryfo lager (draft)",
+      "price": 3,
+      "size": "250ml",
+      "currency": "EUR",
+      "kind": "regular",
+      "source": "seed",
+      "date": "2026-11-13",
+      "note": "Koryfo (Κορυφώ) Lager - Helles: 250ml Draft 3.00 EUR, 375ml Draft 4.00 EUR, 500ml Draft 5.50 EUR"
+    },
+    {
+      "name": "Tapfield",
+      "near": [
+        37.9781,
+        23.7232
+      ],
+      "url": "https://untappd.com/v/tapfield/10079591",
+      "item": "Koryfo lager (draft)",
+      "price": 5.5,
+      "size": "500ml",
+      "currency": "EUR",
+      "kind": "regular",
+      "source": "seed",
+      "date": "2026-11-13",
+      "note": "Koryfo (Κορυφώ) Lager - Helles: 250ml Draft 3.00 EUR, 375ml Draft 4.00 EUR, 500ml Draft 5.50 EUR"
+    },
+    {
+      "name": "Tapfield",
+      "near": [
+        37.9781,
+        23.7232
+      ],
+      "url": "https://untappd.com/v/tapfield/10079591",
+      "item": "Dala Mexican lager (draft)",
+      "price": 5.5,
+      "size": "500ml",
+      "currency": "EUR",
+      "kind": "regular",
+      "source": "seed",
+      "date": "2026-11-13",
+      "note": "Dala Lager - Mexican (Babel): 250ml Draft 3.00 EUR, 375ml Draft 4.00 EUR, 500ml Draft 5.50 EUR"
+    },
+    {
+      "name": "Padre",
+      "near": [
+        37.9868,
+        23.734
+      ],
+      "url": "https://untappd.com/v/padre-craft-beer-taproom-athens/12015601",
+      "item": "Riviera lager (draft)",
+      "price": 5,
+      "size": "400ml",
+      "currency": "EUR",
+      "kind": "regular",
+      "source": "seed",
+      "date": "2026-11-13",
+      "note": "On Tap: Riviera Lager - Helles (Paragon Brewery): 400ml Draft 5.00 EUR"
+    },
+    {
+      "name": "Padre",
+      "near": [
+        37.9868,
+        23.734
+      ],
+      "url": "https://untappd.com/v/padre-craft-beer-taproom-athens/12015601",
+      "item": "Kathimerini lager (draft)",
+      "price": 6,
+      "size": "400ml",
+      "currency": "EUR",
+      "kind": "regular",
+      "source": "seed",
+      "date": "2026-11-13",
+      "note": "On Tap: Kathimerini (Καθημερινή) Lager (Anastasiou Brewery): 400ml Draft 6.00 EUR"
+    },
+    {
+      "name": "Berlin by 5 Drunkmen",
+      "near": [
+        37.9679,
+        23.7512
+      ],
+      "url": "https://untappd.com/v/berlin-by-5-drunkmen/2824676",
+      "item": "Collective Drama pilsner (can)",
+      "price": 6,
+      "size": "500ml",
+      "currency": "EUR",
+      "kind": "regular",
+      "source": "seed",
+      "date": "2026-11-13",
+      "note": "Collective Drama Experience Vol.1 Pilsner - New Zealand: 500ml Can 6.00 EUR"
+    }
+  ],
+  "happyHours": [
+    {
+      "name": "Hard Rock Cafe Athens",
+      "venueId": "seed:hardrockcafeathens",
+      "days": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "start": "16:00",
+      "end": "18:00",
+      "url": "https://cafe.hardrock.com/athens/",
+      "date": "2026-11-13",
+      "note": "Monday to Friday between 16:00 to 18:00 & 22:00 to 23:00: exclusive offers to beer, wine and cocktails. Get your second drink with 75% discount, per person."
+    },
+    {
+      "name": "Hard Rock Cafe Athens",
+      "venueId": "seed:hardrockcafeathens",
+      "days": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "start": "22:00",
+      "end": "23:00",
+      "url": "https://cafe.hardrock.com/athens/",
+      "date": "2026-11-13",
+      "note": "Monday to Friday between 16:00 to 18:00 & 22:00 to 23:00: exclusive offers to beer, wine and cocktails. Get your second drink with 75% discount, per person."
     }
   ]
 }

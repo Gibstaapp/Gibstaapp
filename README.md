@@ -13,6 +13,15 @@ One app, two modes, picked with the switch at the top:
 
 Both modes have a **🧭 Compass** that points at the place you picked, plus list and map views.
 
+**Where it works.** Settings → Area code has two tabs:
+
+- **🇺🇸 U.S.:** San Diego County ZIPs. Weed + beer, dollars, miles.
+- **🇪🇺 Europe:** 259 greater-Athens postcodes (e.g. 105 58 · Plaka), grouped by municipality. Beer only: recreational
+  cannabis isn't legal in Greece, so the Weed switch is greyed out and explains why. Euros, kilometres, Athens time and
+  Greek public holidays. Athens bars are in the daily data. Athens has its own daily refresh (euros, 7 AM Athens time), separate from San Diego's
+  (dollars, 7 AM Pacific). Euro prices come from the bars' own websites and from menus we checked by hand (`server/beer-seed.json`).
+- Results never come from more than 100 miles from your home area code, so San Diego and Athens never mix.
+
 Shared by both modes:
 
 - **Open now.** Places that are closed right now are hidden (toggle in the filter bar). Cards show "Open until 10 PM",

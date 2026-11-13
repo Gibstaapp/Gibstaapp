@@ -87,12 +87,14 @@ export async function fetchOsmVenues(area: { lat: number; lng: number; miles: nu
 }
 
 /** The same place is often mapped as both a node and a building; keep the one with more info. */
-function dedupe(vs: BeerVenue[]): BeerVenue[] {
+export function dedupe(vs: BeerVenue[]): BeerVenue[] {
   const out: BeerVenue[] = [];
   const score = (v: BeerVenue) => +!!v.website + +!!v.openingHours + +!!v.address;
+  // Letters in any alphabet: Greek names ("Μπυραρία") would otherwise all reduce to "" and be merged.
+  const keyOf = (name: string) => name.toLowerCase().normalize('NFD').replace(/[^\p{L}\p{N}]/gu, '');
   for (const v of vs) {
-    const key = v.name.toLowerCase().replace(/[^a-z0-9]/g, '');
-    const i = out.findIndex((o) => o.name.toLowerCase().replace(/[^a-z0-9]/g, '') === key && Math.abs(o.lat - v.lat) < 0.002 && Math.abs(o.lng - v.lng) < 0.002);
+    const key = keyOf(v.name);
+    const i = out.findIndex((o) => keyOf(o.name) === key && Math.abs(o.lat - v.lat) < 0.002 && Math.abs(o.lng - v.lng) < 0.002);
     if (i < 0) out.push(v);
     else if (score(v) > score(out[i])) out[i] = v;
   }

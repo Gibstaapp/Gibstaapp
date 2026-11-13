@@ -1,7 +1,7 @@
 import type { PricedItem, UserProfile } from '@gib/shared';
 import { repo } from './db.ts';
 import { rankItems, type RankQuery } from './pricing/engine.ts';
-import { SD_ZIPS } from './zips.ts';
+import { AREAS } from './zips.ts';
 
 /** Per-person settings each phone keeps for itself (the rest of the profile is server-wide). */
 export type PersonalProfile = Pick<UserProfile, 'homeZip' | 'radiusMiles' | 'veteran' | 'senior' | 'student' | 'visitedStoreIds'>;
@@ -15,7 +15,7 @@ export function profileFor(personal?: Partial<PersonalProfile>): UserProfile {
   if (typeof personal.student === 'boolean') p.student = personal.student;
   if (Array.isArray(personal.visitedStoreIds)) p.visitedStoreIds = personal.visitedStoreIds.filter((x) => typeof x === 'string').slice(0, 500);
   if (typeof personal.radiusMiles === 'number' && personal.radiusMiles > 0) p.radiusMiles = Math.min(personal.radiusMiles, 100);
-  const z = personal.homeZip ? SD_ZIPS[personal.homeZip] : undefined;
+  const z = personal.homeZip ? AREAS[personal.homeZip] : undefined;
   if (z) { p.homeZip = personal.homeZip!; p.lat = z.lat; p.lng = z.lng; }
   return p;
 }
