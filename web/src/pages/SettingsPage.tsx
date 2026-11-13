@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { UserProfile } from '@gib/shared';
-import { api, serverUrl, type StoreRow } from '../api.ts';
+import { api, serverUrl, STATIC, type StoreRow } from '../api.ts';
 import ProfileForm from '../components/ProfileForm.tsx';
 
 const randomTopic = () => `gibstaapp-${crypto.getRandomValues(new Uint32Array(2)).join('').slice(0, 14)}`;
@@ -52,7 +52,7 @@ export default function SettingsPage({ profile, onProfile, onChangeServer }: { p
         </ul>
       </section>
 
-      <section>
+      {!STATIC && <section>
         <h2 className="text-lg font-semibold mb-1">Morning update</h2>
         <label className="text-sm block py-2">
           <span className="text-zinc-400">Refresh + notify at</span>{' '}
@@ -77,7 +77,7 @@ export default function SettingsPage({ profile, onProfile, onChangeServer }: { p
             setTimeout(() => setMsg(null), 4000);
           }} className="rounded-lg bg-zinc-800 px-3 py-2 text-xs">Send test notification</button>
         </div>
-      </section>
+      </section>}
 
       <section>
         <h2 className="text-lg font-semibold mb-1">Share with friends</h2>
@@ -88,17 +88,17 @@ export default function SettingsPage({ profile, onProfile, onChangeServer }: { p
               <input readOnly value={publicUrl} className="flex-1 bg-zinc-900 border border-zinc-700 rounded-lg px-2 py-2 font-mono text-xs" />
               <button onClick={() => navigator.clipboard?.writeText(publicUrl).then(() => { setMsg('Link copied'); setTimeout(() => setMsg(null), 2000); })} className="rounded-lg bg-green-500 text-black font-semibold px-3 text-xs">Copy</button>
             </div>
-            <p className="text-xs text-zinc-500 mt-1">This link changes if the PC restarts. With an ntfy topic set, the new link gets pushed to you.</p>
+            <p className="text-xs text-zinc-500 mt-1">{STATIC ? 'This link is permanent. Prices refresh every morning.' : 'This link changes if the PC restarts. With an ntfy topic set, the new link gets pushed to you.'}</p>
           </>
         ) : <p className="text-sm text-zinc-500">Public link is starting up (or turned off).</p>}
       </section>
 
-      <section>
+      {!STATIC && <section>
         <h2 className="text-lg font-semibold mb-1">Android app</h2>
         <p className="text-sm text-zinc-400">Download the APK on your phone: <a className="text-green-400 underline break-all" href={downloadUrl}>{downloadUrl}</a></p>
         <p className="text-sm text-zinc-400 mt-2">Server: <span className="font-mono text-xs">{serverUrl() || location.origin}</span></p>
         <button onClick={onChangeServer} className="mt-2 rounded-lg bg-zinc-800 px-3 py-2 text-xs">Change server address</button>
-      </section>
+      </section>}
     </div>
   );
 }

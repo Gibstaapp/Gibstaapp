@@ -58,7 +58,17 @@ Create this file yourself. It's **gitignored**, and so is the rest of `server/da
 
 Prices refresh when you tap ↻ (at most once every 30 min) and automatically every morning (7 AM by default, change it in Settings).
 
-## The public link
+## The permanent website (GitHub Pages)
+
+**https://andysteiner778.github.io/Gibstaapp/** stays up when the PC is off. No passcode.
+
+- `.github/workflows/pages.yml` runs every morning (~5-6 AM San Diego): it scrapes fresh weed prices and beer data on GitHub's servers (`server/src/export-static.ts`), builds the site with `VITE_STATIC=1`, and publishes it.
+- **Every push to `main` republishes the site in ~2 minutes** with the latest data, so merged changes go live automatically.
+- Actions tab → "Website" → **Run workflow** refreshes prices on demand.
+- In static mode there's no server: `web/src/staticApi.ts` does the pricing in the browser (same engine as the server), beer places for new areas come straight from OpenStreetMap, and settings / visited stores / price reports are saved on each phone. If a source fails one morning, yesterday's data for it is kept.
+- Not available there (PC version only): shared price reports, the refresh button, ntfy morning notifications.
+
+## The public link (PC version)
 
 With `"tunnel": true`, the server starts a **Cloudflare quick tunnel**. Put `cloudflared` at `tools/cloudflared.exe` (the `tools/` folder is gitignored, so download it yourself).
 You get a random `https://….trycloudflare.com` address that works from any phone, on Wi-Fi or data.

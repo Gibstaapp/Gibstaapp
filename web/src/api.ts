@@ -15,7 +15,7 @@ export function setServerUrl(url: string) {
 }
 // The Android build knows a private ntfy topic where the PC posts its current public link.
 const LINK_TOPIC = import.meta.env.VITE_LINK_TOPIC as string | undefined;
-export const needsServerUrl = () => isNative() && !LINK_TOPIC && !localStorage.getItem(SERVER_KEY);
+export const needsServerUrl = () => import.meta.env.VITE_STATIC !== '1' && isNative() && !LINK_TOPIC && !localStorage.getItem(SERVER_KEY);
 
 /** Find the PC's current public link (it changes when the PC restarts). */
 export async function discoverServer(): Promise<string | null> {
@@ -33,6 +33,8 @@ export async function discoverServer(): Promise<string | null> {
   } catch { /* offline */ }
   return null;
 }
+
+import { staticApi } from './staticApi.ts';
 
 export class AuthError extends Error {}
 
@@ -91,7 +93,7 @@ async function mergedProfile(): Promise<UserProfile> {
 
 export interface StoreRow { store: Store; detected: Store; override: StoreOverride | null }
 
-export const api = {
+const serverApi = {
   auth: (pass: string) => call<{ ok: boolean }>('/api/auth', { method: 'POST', body: JSON.stringify({ pass }) }),
   items: (p: { category?: Category; mode: Mode; maxMiles?: number; search?: string }) =>
     call<PricedItem[]>('/api/items', { method: 'POST', body: JSON.stringify({ ...p, profile: loadPersonal() }) }),
@@ -130,3 +132,7 @@ export const api = {
     removeReport: (id: string) => call<{ ok: boolean }>(`/api/beer/report/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   },
 };
+
+/** VITE_STATIC=1 builds the always-on GitHub Pages site (no server; data from the daily snapshot). */
+export const STATIC = import.meta.env.VITE_STATIC === '1';
+export const api: typeof serverApi = STATIC ? staticApi : serverApi;

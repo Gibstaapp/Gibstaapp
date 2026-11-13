@@ -36,6 +36,10 @@ Two developers each work with their own Claude Code on this repo. Use a branch +
 - **Shared types:** `shared/types.ts`, `shared/beer.ts`.
 - **Prototype:** `BeerFinder/` is the original Kotlin + Python beer prototype, kept for reference only. Not built or run.
 
+## Two ways it runs
+- **PC server** (npm start: Fastify API + cloudflared quick-tunnel link).
+- **GitHub Pages static site** (VITE_STATIC=1 build; web/src/staticApi.ts implements the same api surface in the browser; data comes from server/src/export-static.ts run by .github/workflows/pages.yml). Any API change must be mirrored in staticApi.ts. Server pricing/beer modules imported by the web must stay browser-safe (no node: imports).
+
 ## Commands
 - `npm test`: server vitest suite (must stay green).
 - `npx tsc -p server --noEmit` and `npx tsc -p web --noEmit`: typechecks.

@@ -1,0 +1,95 @@
+# Always-on website: https://andysteiner778.github.io/Gibstaapp/
+#
+# - Every morning: fresh weed prices (Dutchie, Jane, Weedmaps, Eaze) + beer places/happy hours,
+#   then publish the site with that data.
+# - On every push to main: publish the new code right away, reusing the latest data
+#   (so code changes go live in ~2 minutes without waiting for a full price refresh).
+# - "Run workflow" button (Actions tab): choose whether to refresh prices too.
+name: Website
+
+on:
+  schedule:
+    - cron: '0 13 * * *'   # 13:00 UTC = 5-6 AM in San Diego
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      refresh:
+        description: 'Refresh prices too (takes ~15-30 min)'
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+env:
+  SITE_URL: https://andysteiner778.github.io/Gibstaapp
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+
+      - name: Build website (static mode)
+        run: npm run build -w web
+        env:
+          VITE_STATIC: '1'
+
+      - name: Decide whether to refresh prices
+        id: mode
+        run: |
+          if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ github.event.inputs.refresh }}" = "true" ]; then
+            echo "refresh=true" >> "$GITHUB_OUTPUT"
+          elif curl -sf "$SITE_URL/data/weed.json" -o /dev/null; then
+            echo "refresh=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "refresh=true" >> "$GITHUB_OUTPUT"   # first deploy: no data yet
+          fi
+
+      - name: Reuse latest data
+        if: steps.mode.outputs.refresh == 'false'
+        run: |
+          mkdir -p web/dist/data
+          for f in weed.json beer.json meta.json; do curl -sf "$SITE_URL/data/$f" -o "web/dist/data/$f"; done
+
+      - name: Install browser for scraping
+        if: steps.mode.outputs.refresh == 'true'
+        run: npx playwright install --with-deps chromium
+
+      - name: Refresh prices and export data
+        if: steps.mode.outputs.refresh == 'true'
+        working-directory: server
+        run: |
+          mkdir -p data
+          echo '{ "sources": { "sample": false, "dutchie": true, "jane": true, "weedmaps": true, "eaze": true }, "tunnel": false, "sourceTimeoutMs": 900000 }' > data/config.json
+          npx tsx src/export-static.ts ../web/dist/data
+        env:
+          GIB_DB: ${{ runner.temp }}/snapshot.db
+          PREV_URL: ${{ env.SITE_URL }}
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

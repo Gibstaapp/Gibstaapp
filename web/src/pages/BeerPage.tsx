@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { BeerPrice, BeerSort, BeerVenueKind, RankedVenue, UserProfile } from '@gib/shared';
 import { MapContainer, TileLayer, CircleMarker, Popup } from 'react-leaflet';
-import { api } from '../api.ts';
+import { api, STATIC } from '../api.ts';
 import { haversine } from '../geo.ts';
 import Compass, { type CompassTarget } from '../compass/Compass.tsx';
 import { directionsUrl, useLocation } from '../compass/sensors.ts';
@@ -323,7 +323,7 @@ function ReportForm({ venueId, onDone, onCancel }: { venueId: string; onDone: ()
         <button onClick={submit} className="flex-1 rounded-lg bg-amber-500 text-black font-semibold py-2 text-sm">Save</button>
         <button onClick={onCancel} className="rounded-lg bg-zinc-800 px-4 py-2 text-sm">Cancel</button>
       </div>
-      <p className="text-[11px] text-zinc-500">Everyone using this link sees reports, marked "Reported".</p>
+      <p className="text-[11px] text-zinc-500">{STATIC ? 'Saved on this phone only for now (shared reports need the PC version).' : 'Everyone using this link sees reports, marked "Reported".'}</p>
     </section>
   );
 }
