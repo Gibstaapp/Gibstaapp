@@ -1,4 +1,4 @@
-# Always-on website: https://andysteiner778.github.io/Gibstaapp/
+# Always-on website: https://<owner>.github.io/Gibstaapp/
 #
 # - Every morning: fresh weed prices (Jane, Weedmaps, Eaze; Dutchie blocks GitHub) + beer places/happy hours,
 #   then publish the site with that data.
@@ -32,10 +32,6 @@ concurrency:
   group: pages
   cancel-in-progress: false
 
-env:
-  SITE_URL: https://andysteiner778.github.io/Gibstaapp
-  PC_DATA_URL: https://raw.githubusercontent.com/andysteiner778/Gibstaapp/data
-
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -49,6 +45,13 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+
+      # Site address comes from the repo, so renaming the account/repo or moving it to an organization keeps working.
+      - name: Work out site address
+        run: |
+          echo "SITE_URL=https://${GITHUB_REPOSITORY_OWNER,,}.github.io/${GITHUB_REPOSITORY#*/}" >> "$GITHUB_ENV"
+          echo "PC_DATA_URL=https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/data" >> "$GITHUB_ENV"
+          echo "VITE_BASE=/${GITHUB_REPOSITORY#*/}/" >> "$GITHUB_ENV"
 
       - name: Build website (static mode)
         run: npm run build -w web

@@ -1,7 +1,7 @@
 /**
  * Build the data files for the always-on website (GitHub Pages).
  *
- *   GIB_DB=/tmp/snap.db PREV_URL=https://andysteiner778.github.io/Gibstaapp npx tsx src/export-static.ts ../web/dist/data
+ *   GIB_DB=/tmp/snap.db PREV_URL=https://<github-owner>.github.io/Gibstaapp npx tsx src/export-static.ts ../web/dist/data
  *
  * 1. Loads the previous snapshot from the live site, so a source that fails today keeps yesterday's data.
  * 2. Runs the normal weed refresh (all enabled sources) and the beer refresh for the home area.

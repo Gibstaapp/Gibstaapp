@@ -60,7 +60,7 @@ Prices refresh when you tap ↻ (at most once every 30 min) and automatically ev
 
 ## The permanent website (GitHub Pages)
 
-**https://andysteiner778.github.io/Gibstaapp/** stays up when the PC is off. No passcode.
+**https://<github-owner>.github.io/Gibstaapp/** stays up when the PC is off. No passcode.
 
 - `.github/workflows/pages.yml` runs every morning (~5-6 AM San Diego): it scrapes fresh weed prices and beer data on GitHub's servers (`server/src/export-static.ts`), builds the site with `VITE_STATIC=1`, and publishes it.
 - **Every push to `main` republishes the site in ~2 minutes** with the latest data, so merged changes go live automatically.
