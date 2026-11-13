@@ -30,17 +30,16 @@ Open http://localhost:8787.
 
 ### Settings: `server/data/config.json`
 
-Create this file yourself. It's **gitignored**: it holds the passcode, and `server/data/` also holds the database and the APK. Example:
+Create this file yourself. It's **gitignored**, and so is the rest of `server/data/` (database, APK). Example:
 
 ```json
 {
-  "passcode": "pick-something",
   "sources": { "sample": false, "dutchie": true, "jane": true, "weedmaps": true, "eaze": true },
   "tunnel": false
 }
 ```
 
-- `passcode`: needed to use the site (sent as the `x-gib-pass` header). Leave it out for no passcode.
+- `passcode` (optional, off by default): add `"passcode": "something"` to require one (sent as the `x-gib-pass` header). The shared link currently has no passcode.
 - `sources`: which weed data sources to run. Use `"sample": true` with the others `false` for fake test stores (fast, no scraping).
 - `tunnel`: `true` makes a public https link (see below). Developers usually want `false`.
 - Optional: `port` (default 8787), `linkTopic` (private ntfy topic the Android app reads to find the current link).
@@ -62,7 +61,7 @@ Prices refresh when you tap ↻ (at most once every 30 min) and automatically ev
 ## The public link
 
 With `"tunnel": true`, the server starts a **Cloudflare quick tunnel**. Put `cloudflared` at `tools/cloudflared.exe` (the `tools/` folder is gitignored, so download it yourself).
-You get a random `https://….trycloudflare.com` address that works from any phone, on Wi-Fi or data. People need the passcode.
+You get a random `https://….trycloudflare.com` address that works from any phone, on Wi-Fi or data.
 
 - The address **changes whenever the tunnel restarts**, for example when the PC reboots. The current one is in Settings → Share with friends.
 - If an ntfy topic is set, the new link is pushed to you.
