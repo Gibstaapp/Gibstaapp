@@ -55,13 +55,14 @@ app.post('/api/auth', async (req, reply) => {
 });
 
 app.post('/api/items', async (req) => {
-  const b = (req.body ?? {}) as { category?: Category; mode?: Mode; maxMiles?: number; search?: string; limit?: number; profile?: Partial<PersonalProfile> };
+  const b = (req.body ?? {}) as { category?: Category; mode?: Mode; maxMiles?: number; search?: string; openNow?: boolean; limit?: number; profile?: Partial<PersonalProfile> };
   const profile = profileFor(b.profile);
   return query({
     category: b.category,
     mode: b.mode ?? 'pickup',
     maxMiles: b.maxMiles ?? profile.radiusMiles,
     search: b.search,
+    openNow: !!b.openNow,
     limit: Math.min(b.limit ?? 200, 500),
   }, profile);
 });

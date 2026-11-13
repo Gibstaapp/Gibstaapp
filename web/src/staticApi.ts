@@ -68,11 +68,11 @@ const reports = () => load<BeerPrice[]>('gib.beerReports', []);
 
 export const staticApi = {
   auth: async (_pass: string) => ({ ok: true }),
-  items: async (p: { category?: Category; mode: Mode; maxMiles?: number; search?: string }): Promise<PricedItem[]> => {
+  items: async (p: { category?: Category; mode: Mode; maxMiles?: number; search?: string; openNow?: boolean }): Promise<PricedItem[]> => {
     const s = await weed();
     const prof = profile();
     return rankItems(s.products, new Map(s.stores.map((x) => [x.id, x])), s.deals, overrides(), prof,
-      { category: p.category, mode: p.mode, maxMiles: p.maxMiles ?? prof.radiusMiles, search: p.search, limit: 200 }).slice(0, 200);
+      { category: p.category, mode: p.mode, maxMiles: p.maxMiles ?? prof.radiusMiles, search: p.search, openNow: p.openNow, limit: 200 }).slice(0, 200);
   },
   stores: async () => {
     const s = await weed();

@@ -1,16 +1,16 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import type { BeerPrice, BeerSort, BeerVenueKind, RankedVenue, UserProfile } from '@gib/shared';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import type { BeerPrice, BeerSort, BeerVenueKind, OpenStatus, RankedVenue, UserProfile } from '@gib/shared';
 import { MapContainer, TileLayer, CircleMarker, Popup } from 'react-leaflet';
 import { api, STATIC } from '../api.ts';
 import { haversine } from '../geo.ts';
 import Compass, { type CompassTarget } from '../compass/Compass.tsx';
 import { directionsUrl, useLocation } from '../compass/sensors.ts';
 import RefreshBar from '../components/RefreshBar.tsx';
+import { ACCENT, CardLink, Chips, MilesSelect, OpenBadge, OpenNowToggle, PlaceHeader, Segmented, VIEWS, cardClass, openText, pref, type PlaceView } from '../components/Place.tsx';
 
-export type BeerView = 'compass' | 'list' | 'map';
-const AMBER = '#f59e0b';
-const KINDS: [BeerVenueKind | 'all', string][] = [['all', 'All'], ['bar', '🍻 Bars'], ['brewery', '🏭 Breweries'], ['store', '🏪 Stores']];
-const SORTS: [BeerSort, string][] = [['best', 'Best'], ['cheapest', 'Cheapest'], ['closest', 'Closest']];
+const KINDS: readonly (readonly [BeerVenueKind | 'all', string])[] = [['all', 'All'], ['bar', '🍻 Bars'], ['brewery', '🏭 Breweries'], ['store', '🏪 Stores']];
+const SORTS: readonly (readonly [BeerSort, string])[] = [['best', 'Best'], ['cheapest', 'Cheapest'], ['closest', 'Closest']];
+const DISTANCES = [1, 2, 5, 10, 20, 40];
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const KIND_ICON: Record<BeerVenueKind, string> = { bar: '🍻', brewery: '🏭', store: '🏪' };
 
@@ -37,31 +37,49 @@ function sourceBadge(p: BeerPrice): ReactNode {
   return <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-700 text-zinc-300">Added by us</span>;
 }
 const sizeLabel = (p: Pick<BeerPrice, 'size'>) => (p.size ? ` · ${p.size}` : '');
+const venueOpen = (r: RankedVenue): OpenStatus => ({ isOpen: r.isOpen, label: r.hoursLabel, ...(r.closingSoon ? { closingSoon: true } : {}) });
 
-function OpenLine({ r }: { r: RankedVenue }) {
-  if (r.isOpen === null) return <span className="text-zinc-500">Hours unknown</span>;
-  return <span className={r.isOpen ? 'text-green-400' : 'text-red-400'}>{r.hoursLabel ?? (r.isOpen ? 'Open' : 'Closed')}</span>;
+/** Under the big price: what kind of price it is ("Happy hour till 6pm"). */
+function priceNote(r: RankedVenue): ReactNode {
+  if (!r.best) return r.happyHourNow ? <span className="text-amber-300 font-semibold">Happy hour now</span> : null;
+  if (r.best.kind === 'happy_hour') return <span className="text-amber-300 font-semibold">{r.best.label}{r.best.end ? ` till ${t12(r.best.end)}` : ''}</span>;
+  if (r.best.kind === 'special') return <span className="text-amber-300 font-semibold">{r.best.label}</span>;
+  return r.best.label;
 }
 
-function PriceHeadline({ r }: { r: RankedVenue }) {
-  if (!r.best) {
-    return <div className="text-sm text-zinc-400">{r.happyHourNow ? <span className="text-amber-300 font-semibold">🍺 Happy hour now · </span> : null}No price yet</div>;
-  }
+/** One place in the beer list. Same layout as a weed deal card. */
+function VenueCard({ r, rank, onOpen, onPointMe }: { r: RankedVenue; rank: number; onOpen: () => void; onPointMe: () => void }) {
   return (
-    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-      <span className="text-2xl font-bold text-amber-400">{money(r.best.price)}</span>
-      <span className="text-sm text-zinc-300">{r.best.item}{sizeLabel(r.best)}</span>
-      {r.best.kind !== 'regular' && <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-amber-500 text-black">{r.best.label}{r.best.kind === 'happy_hour' && r.best.end ? ` till ${t12(r.best.end)}` : ''}</span>}
-      {r.best.kind === 'regular' && r.happyHourNow && <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-amber-500 text-black">Happy hour now</span>}
-    </div>
+    <article onClick={onOpen} className={`${cardClass('beer')} cursor-pointer active:bg-zinc-800`}>
+      <PlaceHeader accent="beer" rank={rank} icon={KIND_ICON[r.venue.kind]} name={r.venue.name}
+        distanceMiles={r.distanceMiles} address={r.venue.address} open={venueOpen(r)}
+        price={r.best ? money(r.best.price) : undefined} priceNote={priceNote(r)} />
+      {r.best && (
+        <div>
+          <p className="font-medium leading-snug">{r.best.item}{sizeLabel(r.best)}</p>
+          {r.best.snippet && <p className="text-xs text-zinc-500 line-clamp-2">“{r.best.snippet}”</p>}
+        </div>
+      )}
+      {r.best && (
+        <div className="flex flex-wrap gap-1.5">
+          {r.best && sourceBadge(r.best)}
+          {r.best && r.best.kind === 'regular' && r.happyHourNow && <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500 text-black font-semibold">Happy hour now</span>}
+        </div>
+      )}
+      <div className="flex flex-wrap gap-4">
+        <CardLink accent="beer" onClick={onPointMe}>🧭 Point me</CardLink>
+        <CardLink accent="beer" onClick={onOpen}>Details & report a price</CardLink>
+      </div>
+    </article>
   );
 }
 
-export default function BeerPage({ profile, view, top }: { profile: UserProfile; view: BeerView; top: ReactNode }) {
-  const [kind, setKind] = useState<BeerVenueKind | 'all'>(() => (localStorage.getItem('gib.beer.kind') as BeerVenueKind) || 'all');
-  const [sort, setSort] = useState<BeerSort>(() => (localStorage.getItem('gib.beer.sort') as BeerSort) || 'best');
-  const [openNow, setOpenNow] = useState(() => localStorage.getItem('gib.beer.open') !== '0');
-  const [maxMiles, setMaxMiles] = useState(() => Number(localStorage.getItem('gib.beer.miles')) || 10);
+export default function BeerPage({ profile, top }: { profile: UserProfile; top: ReactNode }) {
+  const [kind, setKind] = useState<BeerVenueKind | 'all'>(() => (pref.get('gib.beer.kind') as BeerVenueKind) || 'all');
+  const [sort, setSort] = useState<BeerSort>(() => (pref.get('gib.beer.sort') as BeerSort) || 'best');
+  const [openNow, setOpenNow] = useState(() => pref.get('gib.beer.open') !== '0');
+  const [maxMiles, setMaxMiles] = useState(() => Number(pref.get('gib.beer.miles')) || 10);
+  const [view, setView] = useState<PlaceView>(() => (pref.get('gib.beer.view') as PlaceView) || 'list');
   const [list, setList] = useState<RankedVenue[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [idx, setIdx] = useState(0);
@@ -74,9 +92,9 @@ export default function BeerPage({ profile, view, top }: { profile: UserProfile;
   useEffect(() => { if (haversine(queryAt.lat, queryAt.lng, fix.lat, fix.lng) > 0.15) setQueryAt({ lat: fix.lat, lng: fix.lng }); }, [fix, queryAt]);
 
   useEffect(() => {
-    localStorage.setItem('gib.beer.kind', kind); localStorage.setItem('gib.beer.sort', sort);
-    localStorage.setItem('gib.beer.open', openNow ? '1' : '0'); localStorage.setItem('gib.beer.miles', String(maxMiles));
-  }, [kind, sort, openNow, maxMiles]);
+    pref.set('gib.beer.kind', kind); pref.set('gib.beer.sort', sort); pref.set('gib.beer.view', view);
+    pref.set('gib.beer.open', openNow ? '1' : '0'); pref.set('gib.beer.miles', String(maxMiles));
+  }, [kind, sort, view, openNow, maxMiles]);
 
   const load = useCallback(() => {
     setError(null);
@@ -92,13 +110,26 @@ export default function BeerPage({ profile, view, top }: { profile: UserProfile;
     setDetail(r.venues.find((x) => x.venue.id === id) ?? null);
   }, [queryAt, kind, sort]);
 
+  const pointAt = (venueId: string) => {
+    const i = list?.findIndex((x) => x.venue.id === venueId) ?? -1;
+    if (i >= 0) setIdx(i);
+    setDetail(null);
+    setView('compass');
+    window.scrollTo(0, 0);
+  };
+
   const current = list?.[idx] ?? null;
   const target: CompassTarget | null = current && {
     id: current.venue.id, name: `${KIND_ICON[current.venue.kind]} ${current.venue.name}`, lat: current.venue.lat, lng: current.venue.lng,
-    headline: <PriceHeadline r={current} />,
+    headline: current.best ? (
+      <div className="flex flex-wrap items-baseline gap-x-2">
+        <span className={`text-2xl font-bold ${ACCENT.beer.text}`}>{money(current.best.price)}</span>
+        <span className="text-sm text-zinc-300">{current.best.item}{sizeLabel(current.best)}</span>
+      </div>
+    ) : <div className="text-sm text-zinc-400">No price yet</div>,
     detail: (<>
-      <div><OpenLine r={current} />{current.venue.address ? ` · ${current.venue.address}` : ''}</div>
-      {current.best?.snippet && <div className="text-xs text-zinc-500 line-clamp-2">“{current.best.snippet}”</div>}
+      <div><OpenBadge s={venueOpen(current)} />{current.venue.address ? ` · ${current.venue.address}` : ''}</div>
+      {current.best && <div>{priceNote(current)}</div>}
       <button onClick={() => setDetail(current)} className="text-xs underline text-zinc-300">Details & report a price</button>
     </>),
   };
@@ -107,59 +138,49 @@ export default function BeerPage({ profile, view, top }: { profile: UserProfile;
 
   return (
     <div>
-      <header className="sticky top-0 z-20 bg-[#14110b]/95 backdrop-blur border-b border-zinc-800 pt-[env(safe-area-inset-top)]">
+      <header className={`sticky top-0 z-20 ${ACCENT.beer.header} backdrop-blur border-b border-zinc-800 pt-[env(safe-area-inset-top)]`}>
         <div className="px-4 pt-3 pb-2 flex items-center justify-between gap-3">
           {top}
-          <RefreshBar onRefreshed={load} statusFn={api.beer.status} refreshFn={api.beer.refresh} />
+          <RefreshBar onRefreshed={load} statusFn={api.beer.status} refreshFn={api.beer.refresh} accent="beer" />
         </div>
-        <div className="flex gap-2 overflow-x-auto px-4 pb-2 no-scrollbar">
-          {KINDS.map(([k, label]) => (
-            <button key={k} onClick={() => setKind(k)}
-              className={`shrink-0 px-3 py-1.5 rounded-full text-sm border ${kind === k ? 'bg-amber-500 text-black border-amber-500 font-semibold' : 'border-zinc-700 text-zinc-300'}`}>{label}</button>
-          ))}
-        </div>
+        <Chips accent="beer" items={KINDS} value={kind} onChange={setKind} />
         <div className="flex flex-wrap items-center gap-2 px-4 pb-3 text-sm">
-          <div className="flex rounded-lg overflow-hidden border border-zinc-700">
-            {SORTS.map(([s, label]) => (
-              <button key={s} onClick={() => setSort(s)} className={`px-3 py-1 ${sort === s ? 'bg-zinc-200 text-black' : 'text-zinc-300'}`}>{label}</button>
-            ))}
-          </div>
-          <select value={maxMiles} onChange={(e) => setMaxMiles(Number(e.target.value))} className="bg-zinc-900 border border-zinc-700 rounded-lg px-2 py-1">
-            {[1, 2, 5, 10, 20, 40].map((d) => <option key={d} value={d}>≤ {d} mi</option>)}
-          </select>
-          <label className="flex items-center gap-1 text-zinc-300"><input type="checkbox" checked={openNow} onChange={(e) => setOpenNow(e.target.checked)} /> Open now</label>
+          <Segmented items={SORTS} value={sort} onChange={setSort} />
+          <MilesSelect value={maxMiles} options={DISTANCES} onChange={setMaxMiles} />
+          <OpenNowToggle value={openNow} onChange={setOpenNow} />
+          <div className="flex-1" />
+          <Segmented items={VIEWS} value={view} onChange={setView} />
         </div>
       </header>
 
       {loadingNote && <div className="mx-4 mt-3 rounded-xl bg-zinc-800 px-3 py-2 text-sm text-zinc-300">{loadingNote}</div>}
-      {error && <p className="p-4 text-red-400 text-sm">{error}</p>}
+      {error && <p className="m-4 p-3 rounded-lg bg-red-950 text-red-200 text-sm">{error}</p>}
       {!list && !error && <p className="p-6 text-zinc-400">Finding beer near you…</p>}
       {list && list.length === 0 && !loadingNote && (
-        <p className="p-6 text-zinc-400 text-sm">Nothing matches. Try a bigger distance{openNow ? ' or turn off "Open now"' : ''}. If this is the first run, places are still loading (tap ↻ status).</p>
+        <p className="p-6 text-zinc-400 text-sm">
+          No places{openNow ? ' open right now' : ''} within {maxMiles} mi. Try a wider distance{openNow ? ' or turn off "Open now"' : ''}.
+          If this is the first run, places are still loading (tap ↻ status).
+        </p>
       )}
 
       {list && list.length > 0 && view === 'compass' && (
-        <Compass fix={fix} target={target} accent={AMBER} locationError={locError} onRetryLocation={retry}
+        <Compass fix={fix} target={target} accent={ACCENT.beer.hex} locationError={locError} onRetryLocation={retry}
           position={`${idx + 1} of ${list.length}`}
           onPrev={idx > 0 ? () => setIdx(idx - 1) : undefined}
           onNext={idx < list.length - 1 ? () => setIdx(idx + 1) : undefined} />
       )}
 
       {list && list.length > 0 && view === 'list' && (
-        <div className="p-3 space-y-2">
-          <p className="text-xs text-zinc-500 px-1">{list.length} places · {priced} with a price right now · from {fix.source === 'gps' ? 'your location' : `ZIP ${profile.homeZip}`}</p>
-          {list.map((r, i) => (
-            <button key={r.venue.id} onClick={() => setDetail(r)} className="w-full text-left rounded-2xl bg-zinc-900 border border-zinc-800 p-3 space-y-1 active:bg-zinc-800">
-              <div className="flex justify-between gap-2">
-                <div className="font-semibold leading-tight">{KIND_ICON[r.venue.kind]} {r.venue.name}</div>
-                <div className="text-xs text-zinc-400 shrink-0">{r.distanceMiles.toFixed(1)} mi</div>
-              </div>
-              <PriceHeadline r={r} />
-              <div className="text-xs text-zinc-400 flex flex-wrap gap-x-2 items-center"><OpenLine r={r} />{r.best && sourceBadge(r.best)}
-                <span className="ml-auto text-amber-300" onClick={(e) => { e.stopPropagation(); setIdx(i); window.dispatchEvent(new CustomEvent('gib:beer-view', { detail: 'compass' })); }}>🧭 Point me</span>
-              </div>
-            </button>
-          ))}
+        <div className="p-3 space-y-3">
+          <p className="text-xs text-zinc-500 px-1">{list.length} places{openNow ? ' open now' : ''} · {priced} with a price right now · from {fix.source === 'gps' ? 'your location' : `ZIP ${profile.homeZip}`}</p>
+          <ul className="space-y-3">
+            {list.map((r, i) => (<Fragment key={r.venue.id}>
+              {openNow && r.isOpen === null && (i === 0 || list[i - 1].isOpen !== null) && (
+                <li className="text-xs text-zinc-500 px-1 pt-2">No hours listed for the places below. They may be closed.</li>
+              )}
+              <li><VenueCard r={r} rank={i + 1} onOpen={() => setDetail(r)} onPointMe={() => pointAt(r.venue.id)} /></li>
+            </Fragment>))}
+          </ul>
           <p className="text-xs text-zinc-500 p-2">Prices come from bar & brewery websites and from people's reports. Most bars don't post prices online. Saw one? Tap a place, then "Report a price".</p>
         </div>
       )}
@@ -167,7 +188,7 @@ export default function BeerPage({ profile, view, top }: { profile: UserProfile;
       {list && view === 'map' && <BeerMap list={list} fix={fix} onPick={setDetail} />}
 
       {detail && <VenueSheet r={detail} onClose={() => setDetail(null)} onChanged={() => refreshDetail(detail.venue.id)}
-        onCompass={() => { const i = list?.findIndex((x) => x.venue.id === detail.venue.id) ?? -1; if (i >= 0) setIdx(i); setDetail(null); window.dispatchEvent(new CustomEvent('gib:beer-view', { detail: 'compass' })); }} />}
+        onCompass={() => pointAt(detail.venue.id)} />}
     </div>
   );
 }
@@ -192,7 +213,7 @@ function BeerMap({ list, fix, onPick }: { list: RankedVenue[]; fix: { lat: numbe
               <div className="text-sm">
                 <strong>{r.venue.name}</strong><br />
                 {r.best ? <>{money(r.best.price)} {r.best.item} ({r.best.label})</> : 'No price yet'}<br />
-                {r.hoursLabel ?? (r.isOpen === null ? 'Hours unknown' : '')}<br />
+                {openText(venueOpen(r))}<br />
                 <button className="underline" onClick={() => onPick(r)}>Details</button>
               </div>
             </Popup>
@@ -214,7 +235,7 @@ function VenueSheet({ r, onClose, onChanged, onCompass }: { r: RankedVenue; onCl
         <div className="flex justify-between gap-3">
           <div>
             <h2 className="text-xl font-bold leading-tight">{KIND_ICON[v.kind]} {v.name}</h2>
-            <p className="text-sm text-zinc-400">{r.distanceMiles.toFixed(1)} mi · <OpenLine r={r} /></p>
+            <p className="text-sm text-zinc-400">{r.distanceMiles.toFixed(1)} mi · <OpenBadge s={venueOpen(r)} /></p>
             {v.address && <p className="text-sm text-zinc-400">{v.address}</p>}
           </div>
           <button onClick={onClose} className="text-zinc-400 text-2xl leading-none">×</button>

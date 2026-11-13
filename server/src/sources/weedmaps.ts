@@ -4,6 +4,7 @@ import type { SearchArea, SourceAdapter, SourceResult } from './types.ts';
 import { config } from '../config.ts';
 import { withContext, pause } from './browser.ts';
 import { mapCategory, parseGrams, parseThcMg } from '../normalize.ts';
+import { weeklyHoursToOsm } from '../hours.ts';
 
 /**
  * Weedmaps adapter.
@@ -399,6 +400,7 @@ function toStore(l: any, detail: any | undefined, menuTaxFlag: boolean | undefin
     ownSitePickup: null,
     taxIncluded,
     delivery,
+    hours: weeklyHoursToOsm(d.business_hours ?? l.business_hours),
   };
 }
 

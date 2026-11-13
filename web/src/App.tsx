@@ -7,7 +7,7 @@ import DealsPage from './pages/DealsPage.tsx';
 import StoresPage from './pages/StoresPage.tsx';
 import SettingsPage from './pages/SettingsPage.tsx';
 import ServerSetup from './pages/ServerSetup.tsx';
-import BeerPage, { type BeerView } from './pages/BeerPage.tsx';
+import BeerPage from './pages/BeerPage.tsx';
 
 type AppMode = 'weed' | 'beer';
 
@@ -21,19 +21,15 @@ function ModeSwitch({ mode, onChange }: { mode: AppMode; onChange: (m: AppMode) 
   );
 }
 
-type Tab = 'deals' | 'stores' | 'settings' | BeerView;
+// Both modes: Deals (list / map / compass, switched in the header) + Settings. Weed also has Stores.
+type Tab = 'deals' | 'stores' | 'settings';
 
 export default function App() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [mode, setModeState] = useState<AppMode>(() => (localStorage.getItem('gib.app') as AppMode) || 'weed');
-  const [tab, setTab] = useState<Tab>(() => (mode === 'beer' ? 'compass' : 'deals'));
-  const setMode = (m: AppMode) => { localStorage.setItem('gib.app', m); setModeState(m); setTab(m === 'beer' ? 'compass' : 'deals'); window.scrollTo(0, 0); };
-  useEffect(() => {
-    const go = (e: Event) => setTab((e as CustomEvent<BeerView>).detail);
-    window.addEventListener('gib:beer-view', go);
-    return () => window.removeEventListener('gib:beer-view', go);
-  }, []);
+  const [tab, setTab] = useState<Tab>('deals');
+  const setMode = (m: AppMode) => { localStorage.setItem('gib.app', m); setModeState(m); setTab('deals'); window.scrollTo(0, 0); };
   const [needServer, setNeedServer] = useState(needsServerUrl());
   const [needPass, setNeedPass] = useState(false);
 
@@ -65,8 +61,8 @@ export default function App() {
   const top = <ModeSwitch mode={mode} onChange={setMode} />;
   const plainTop = <div className="px-4 pt-[calc(env(safe-area-inset-top)+0.75rem)]">{top}</div>;
   const navItems: readonly (readonly [Tab, string, string])[] = mode === 'weed'
-    ? [['deals', 'Deals', '💲'], ['stores', 'Stores', '🏪'], ['settings', 'Settings', '⚙️']]
-    : [['compass', 'Compass', '🧭'], ['list', 'List', '📋'], ['map', 'Map', '🗺️'], ['settings', 'Settings', '⚙️']];
+    ? [['deals', 'Deals', '🌿'], ['stores', 'Stores', '🏪'], ['settings', 'Settings', '⚙️']]
+    : [['deals', 'Deals', '🍺'], ['settings', 'Settings', '⚙️']];
   const activeColor = mode === 'weed' ? 'text-green-400' : 'text-amber-400';
 
   return (
@@ -74,11 +70,11 @@ export default function App() {
       <main className="flex-1 pb-20">
         {mode === 'weed' && tab === 'deals' && <DealsPage profile={profile} onProfile={setProfile} top={top} />}
         {mode === 'weed' && tab === 'stores' && <>{plainTop}<StoresPage profile={profile} onProfile={setProfile} /></>}
-        {mode === 'beer' && (tab === 'compass' || tab === 'list' || tab === 'map') && <BeerPage profile={profile} view={tab} top={top} />}
+        {mode === 'beer' && tab === 'deals' && <BeerPage profile={profile} top={top} />}
         {tab === 'settings' && <>{plainTop}<SettingsPage profile={profile} onProfile={setProfile} onChangeServer={() => setNeedServer(true)} /></>}
       </main>
       <nav className={`fixed bottom-0 inset-x-0 backdrop-blur border-t border-zinc-800 pb-[env(safe-area-inset-bottom)] ${mode === 'weed' ? 'bg-[#0e1714]/95' : 'bg-[#17130b]/95'}`}>
-        <div className={`max-w-3xl mx-auto grid ${navItems.length === 4 ? 'grid-cols-4' : 'grid-cols-3'}`}>
+        <div className={`max-w-3xl mx-auto grid ${navItems.length === 3 ? 'grid-cols-3' : 'grid-cols-2'}`}>
           {navItems.map(([id, label, icon]) => (
             <button key={id} onClick={() => setTab(id)} className={`py-3 text-sm flex flex-col items-center gap-0.5 ${tab === id ? activeColor : 'text-zinc-400'}`}>
               <span className="text-lg leading-none">{icon}</span>{label}

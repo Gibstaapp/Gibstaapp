@@ -98,6 +98,7 @@ function mergeInto(target: Store, s: Store): Store {
     menuUrl: target.menuUrl ?? s.menuUrl,
     website: target.website ?? s.website,
     phone: target.phone ?? s.phone,
+    hours: target.hours ?? s.hours,
     // true wins (any source saying "tax included"/"own-site pickup" is a positive signal)
     taxIncluded: target.taxIncluded === true || s.taxIncluded === true ? true : pick(target.taxIncluded, s.taxIncluded),
     ownSitePickup: target.ownSitePickup === true || s.ownSitePickup === true ? true : pick(target.ownSitePickup, s.ownSitePickup),

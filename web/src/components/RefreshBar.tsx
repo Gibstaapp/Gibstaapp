@@ -14,8 +14,9 @@ function ago(iso?: string) {
 const SOURCE_NAMES: Record<string, string> = { osm: 'Places (OpenStreetMap)', 'bar-websites': 'Bar websites' };
 
 /** Refresh button + "updated X ago" + per-source status (tap to see which sources failed). */
-export default function RefreshBar({ onRefreshed, statusFn = api.status, refreshFn = api.refresh }: {
+export default function RefreshBar({ onRefreshed, statusFn = api.status, refreshFn = api.refresh, accent = 'weed' }: {
   onRefreshed: () => void;
+  accent?: 'weed' | 'beer';
   statusFn?: () => Promise<RefreshStatus>;
   refreshFn?: () => Promise<RefreshStatus>;
 }) {
@@ -61,7 +62,7 @@ export default function RefreshBar({ onRefreshed, statusFn = api.status, refresh
           wasRunning.current = true;
           setStatus(s);
         }}
-        className="rounded-full bg-green-500 text-black w-9 h-9 grid place-items-center font-bold disabled:opacity-60"
+        className={`rounded-full ${accent === 'beer' ? 'bg-amber-500' : 'bg-green-500'} text-black w-9 h-9 grid place-items-center font-bold disabled:opacity-60`}
         aria-label="Refresh prices"
       >
         <span className={status?.running ? 'animate-spin inline-block' : ''}>↻</span>

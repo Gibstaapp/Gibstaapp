@@ -95,7 +95,7 @@ export interface StoreRow { store: Store; detected: Store; override: StoreOverri
 
 const serverApi = {
   auth: (pass: string) => call<{ ok: boolean }>('/api/auth', { method: 'POST', body: JSON.stringify({ pass }) }),
-  items: (p: { category?: Category; mode: Mode; maxMiles?: number; search?: string }) =>
+  items: (p: { category?: Category; mode: Mode; maxMiles?: number; search?: string; openNow?: boolean }) =>
     call<PricedItem[]>('/api/items', { method: 'POST', body: JSON.stringify({ ...p, profile: loadPersonal() }) }),
   stores: () => call<StoreRow[]>('/api/stores'),
   setOverride: (storeId: string, o: Partial<StoreOverride>) => call<StoreOverride>(`/api/stores/${encodeURIComponent(storeId)}/override`, { method: 'PUT', body: JSON.stringify(o) }),
