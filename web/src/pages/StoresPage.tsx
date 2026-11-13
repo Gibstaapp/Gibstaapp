@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { openState, wallClockIn, STORE_TIME_ZONE } from '../../../server/src/hours.ts';
+import { OpenBadge } from '../components/Place.tsx';
 import type { StoreOverride, UserProfile } from '@gib/shared';
 import { api, type StoreRow } from '../api.ts';
 import { haversine } from '../geo.ts';
@@ -44,7 +46,7 @@ export default function StoresPage({ profile, onProfile }: { profile: UserProfil
     .sort((a, b) => a.d - b.d);
 
   return (
-    <div className="p-4 space-y-3 pt-[calc(env(safe-area-inset-top)+1rem)]">
+    <div className="p-4 space-y-3">
       <div>
         <h2 className="text-lg font-semibold">Stores</h2>
         <p className="text-xs text-zinc-400">Fix anything auto-detection got wrong. Your answers override what the menus say.</p>
@@ -59,7 +61,8 @@ export default function StoresPage({ profile, onProfile }: { profile: UserProfil
               <div className="flex justify-between gap-2">
                 <div className="min-w-0">
                   <h3 className="font-semibold truncate">{r.store.name}</h3>
-                  <p className="text-xs text-zinc-400">{d.toFixed(1)} mi · {r.store.address}, {r.store.city}</p>
+                  <p className="text-xs text-zinc-400">{d.toFixed(1)} mi · {[r.store.address.replace(/[,\s]+$/, ''), r.store.city].filter(Boolean).join(', ')}</p>
+                  <p className="text-xs mt-0.5"><OpenBadge s={openState(r.store.hours, wallClockIn(STORE_TIME_ZONE))} /></p>
                   <p className="text-[11px] text-zinc-500 mt-0.5">via {r.store.sources.map((s) => s.source).join(', ')}</p>
                 </div>
                 {r.store.menuUrl && <a href={r.store.menuUrl} target="_blank" rel="noreferrer" className="text-xs text-green-400 underline shrink-0">menu ↗</a>}

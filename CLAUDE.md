@@ -33,7 +33,11 @@ Two developers each work with their own Claude Code on this repo. Use a branch +
   - Pages: `pages/DealsPage.tsx` (weed), `pages/BeerPage.tsx` (beer compass/list/map, detail sheet, report form).
   - Compass: `web/src/compass/{sensors.ts,Compass.tsx}`, `components/WeedCompass.tsx`.
   - API client: `web/src/api.ts`.
-- **Shared types:** `shared/types.ts`, `shared/beer.ts`.
+  - Shared look for both sides (cards, filter bar, open badge, logo, accent colors): `components/Place.tsx`. Weed = green, beer = amber. Build new UI from these so the two sides stay identical.
+  - Compass closeness indicator (burn mark / sloshing beer): `compass/Heat.tsx`, animations in `index.css`.
+  - Badges: rules in `shared/badges.ts`, phone storage in `web/src/badges.ts`, `pages/BadgesPage.tsx`, `components/BadgeParty.tsx`.
+- **Opening hours (both sides):** `server/src/hours.ts` (open now, closing soon, Weedmaps hours -> opening_hours text, time zones).
+- **Shared types:** `shared/types.ts`, `shared/beer.ts`, `shared/badges.ts`.
 - **Prototype:** `BeerFinder/` is the original Kotlin + Python beer prototype, kept for reference only. Not built or run.
 
 ## Two ways it runs
@@ -50,5 +54,7 @@ Two developers each work with their own Claude Code on this repo. Use a branch +
 - **Data honesty:** only show prices that came from a real source (website, user report, team-verified seed). Always label the source and keep the original snippet as fine print. Never invent or "example" beer deals in live data.
 - **Windows Git Bash:** `sed`, heredocs and `node -e` one-liners mangle regex `\b` (it becomes a backspace) and backticks / `${}`. Edit regex-heavy or template-literal code with the Edit tool.
 - **Times:** the server runs in Pacific time. Beer queries send `tzOffset`, so open/closed and happy hours use the phone's local time.
+  Weed store hours are always judged on San Diego time (`wallClockIn`). Tests pin the time zone in `server/vitest.config.ts`.
+- **Beer price parsing** is strict on purpose (`server/test/accuracy.test.ts` holds real snippets that used to produce wrong prices). Add the snippet as a test when you find a new bad one.
 - **Weed sources** (Weedmaps/Eaze) scrape with Playwright and are fragile. A failed source keeps its previous data.
 - Don't commit anything under `server/data/`, `tools/`, APKs or logs.

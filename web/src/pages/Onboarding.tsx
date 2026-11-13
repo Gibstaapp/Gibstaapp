@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { UserProfile } from '@gib/shared';
 import { api } from '../api.ts';
 import ProfileForm from '../components/ProfileForm.tsx';
+import { Logo } from '../components/Place.tsx';
 
 export default function Onboarding({ profile, onDone }: { profile: UserProfile; onDone: (p: UserProfile) => void }) {
   const [draft, setDraft] = useState(profile);
@@ -23,9 +24,10 @@ export default function Onboarding({ profile, onDone }: { profile: UserProfile; 
   return (
     <div className="max-w-md mx-auto p-6 space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">Welcome to Gibsta<span className="text-green-400">app</span></h1>
+        <Logo size={64} />
+        <h1 className="text-2xl font-bold mt-3">Welcome to <span className="text-green-400">Gibsta</span><span className="text-amber-400">app</span></h1>
         <p className="text-zinc-400 mt-2 text-sm">
-          Cheapest out-the-door prices across San Diego, with today's deals, taxes, and delivery fees counted in.
+          A compass that points at the cheapest weed and beer near you, with today's deals, taxes, and delivery fees counted in.
           A few questions so prices match what <em>you</em> would actually pay:
         </p>
       </div>

@@ -1,5 +1,6 @@
 import { MapContainer, TileLayer, CircleMarker, Popup } from 'react-leaflet';
 import type { PricedItem, UserProfile } from '@gib/shared';
+import { openText } from './Place.tsx';
 
 /** One dot per store, colored by how cheap its best item is (green = cheapest). */
 export default function MapView({ items, profile }: { items: PricedItem[]; profile: UserProfile }) {
@@ -34,6 +35,7 @@ export default function MapView({ items, profile }: { items: PricedItem[]; profi
             <Popup>
               <div className="text-sm">
                 <strong>{item.store.name}</strong><br />
+                {openText(item.open ?? { isOpen: null })}<br />
                 Best: {item.product.name}<br />
                 ${item.perUnit.toFixed(2)}{item.unitLabel} · ${item.otd.toFixed(2)} OTD<br />
                 {item.deal ? <em>{item.deal.title}</em> : 'No deal'}<br />

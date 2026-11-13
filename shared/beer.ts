@@ -56,6 +56,7 @@ export interface RankedVenue {
   bearing: number;          // degrees from north, clockwise
   isOpen: boolean | null;   // null = hours unknown
   hoursLabel?: string;      // "Open until 2 AM", "Opens 11 AM"
+  closingSoon?: boolean;    // open, but closes within the hour
   /** Cheapest price that applies right now (happy hour/game day included). */
   best: (BeerPrice & { label: string }) | null;
   happyHourNow: boolean;

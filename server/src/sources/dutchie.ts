@@ -4,6 +4,7 @@ import type { SearchArea, SourceAdapter, SourceResult } from './types.ts';
 import { config } from '../config.ts';
 import { withContext, pause } from './browser.ts';
 import { mapCategory, parseGrams, parseThcMg } from '../normalize.ts';
+import { dutchieHoursToOsm } from '../hours.ts';
 
 /**
  * Dutchie (dutchie.com + the menus it embeds on dispensaries' own sites).
@@ -309,7 +310,7 @@ function taxIncludedOf(d: RawDispensary, med: boolean): boolean | null {
   return null; // some taxes included, some added
 }
 
-function storeOf(d: RawDispensary): Store | null {
+function storeOf(d: RawDispensary, hours?: string): Store | null {
   const coords = d.location?.geometry?.coordinates;
   if (!coords || coords.length < 2) return null;
   const [lng, lat] = coords;
@@ -340,6 +341,7 @@ function storeOf(d: RawDispensary): Store | null {
     ownSitePickup: onlinePickup,
     taxIncluded: taxIncludedOf(d, med),
     delivery: deliveryOf(d),
+    ...(hours ? { hours } : {}),
   };
 }
 
@@ -709,8 +711,21 @@ async function run(page: Page, area: SearchArea, log: (msg: string) => void): Pr
   };
   const data = await gql('/graphql', `{ filteredDispensaries(filter: ${gqlLiteral(dfilter)}) { ${DISPENSARY_FIELDS} } }`);
   const raws: RawDispensary[] = data?.filteredDispensaries ?? [];
+  // Opening hours come from a separate small query, so a schema change there can never break the menus.
+  const hoursById = new Map<string, string>();
+  try {
+    const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map((d) => `${d} { active start end }`).join(' ');
+    const h = await gql('/graphql', `{ filteredDispensaries(filter: ${gqlLiteral(dfilter)}) { id hoursSettings { inStorePickup { effectiveHours { ${DAYS} } } } } }`);
+    for (const d of h?.filteredDispensaries ?? []) {
+      const hours = dutchieHoursToOsm(d?.hoursSettings?.inStorePickup?.effectiveHours);
+      if (hours) hoursById.set(d.id, hours);
+    }
+    log(`opening hours for ${hoursById.size} of ${raws.length} dispensaries`);
+  } catch (e) {
+    log(`opening hours not available (${e instanceof Error ? e.message : e})`);
+  }
   const candidates = raws
-    .map((d) => ({ d, store: storeOf(d) }))
+    .map((d) => ({ d, store: storeOf(d, hoursById.get(d.id)) }))
     .filter((x): x is { d: RawDispensary; store: Store } => !!x.store && x.d.status !== 'closed-permanently')
     .map((x) => ({ ...x, miles: haversineMiles(area.lat, area.lng, x.store.lat, x.store.lng) }))
     .filter((x) => x.miles <= area.radiusMiles)

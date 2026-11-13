@@ -28,6 +28,11 @@ const STORES: Omit<Store, 'sources' | 'id'>[] = [
   { name: 'Vista Ridge Wellness', address: '1300 E Vista Way', city: 'Vista', lat: 33.2, lng: -117.24, pickup: true, ownSitePickup: true, taxIncluded: false, delivery: [{ via: 'store', fee: 5, minimum: 60 }], menuUrl: 'https://example.com/vrw' },
 ];
 
+// Fake hours too, so open / closed / "Hours not listed" all show up when testing.
+const SAMPLE_HOURS: (string | undefined)[] = [
+  'Mo-Su 08:00-22:00', 'Mo-Su 07:00-21:00', 'Mo-Th 09:00-21:00; Fr,Sa 09:00-23:00; Su 10:00-20:00', 'Mo-Su 06:00-24:00', undefined,
+];
+
 interface Template { name: string; brand: string; cat: Category; grams?: number; thcMg?: number; base: number; thc?: number }
 const TEMPLATES: Template[] = [
   { name: 'Blue Dream 3.5g', brand: 'Pacific Stone', cat: 'flower', grams: 3.5, base: 25, thc: 24 },
@@ -65,7 +70,7 @@ export const sampleAdapter: SourceAdapter = {
 
     STORES.forEach((s, i) => {
       const id = `sample:${i}`;
-      stores.push({ ...s, id, sources: [{ source: 'sample', externalId: String(i) }] });
+      stores.push({ ...s, id, hours: SAMPLE_HOURS[i % SAMPLE_HOURS.length], sources: [{ source: 'sample', externalId: String(i) }] });
 
       // Tax-included stores price a bit higher on the shelf.
       const markup = s.taxIncluded ? 1.25 : 1;

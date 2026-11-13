@@ -41,6 +41,14 @@ export interface Store {
   ownSitePickup: boolean | null;  // can order pickup on the store's own site (not Weedmaps/Eaze). null = unknown
   taxIncluded: boolean | null;    // listed prices already include taxes. null = unknown
   delivery: DeliveryOption[];
+  hours?: string;        // OpenStreetMap opening_hours syntax, e.g. "Mo 08:00-22:00; Tu 08:00-22:00"
+}
+
+/** Is a place open right now? Same shape for weed stores and beer places. */
+export interface OpenStatus {
+  isOpen: boolean | null;   // null = hours unknown
+  label?: string;           // "Open until 10 PM", "Closes 9:55 PM", "Opens Sat 8 AM"
+  closingSoon?: boolean;    // open, but closes within the hour
 }
 
 export interface StoreOverride {
@@ -171,6 +179,7 @@ export interface PricedItem {
   perUnit: number;                  // $/g or $/100mg THC
   unitLabel: '/g' | '/100mg' | '/ea';
   distanceMiles: number;
+  open: OpenStatus;                 // the store's hours right now
   finePrint: FinePrintItem[];
   // Set when this item is a "closer pick": ≥5 mi closer than the cheapest same-size option and ≤$10 more.
   closerPick?: {
@@ -199,3 +208,4 @@ export interface RefreshStatus {
   sources: SourceStatus[];
 }
 export * from './beer.ts';
+export * from './badges.ts';

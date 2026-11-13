@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { PricedItem } from '@gib/shared';
 import FinePrint from './FinePrint.tsx';
+import { CardLink, PlaceHeader, cardClass } from './Place.tsx';
 
 const $ = (n: number) => `$${n.toFixed(2)}`;
 const VIA_LABEL = { weedmaps: 'Weedmaps', eaze: 'Eaze', store: 'Store' } as const;
@@ -22,7 +23,7 @@ function Badge({ children, tone = 'zinc', title }: { children: React.ReactNode; 
   return <span title={title} className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] ${tones[tone]}`}>{children}</span>;
 }
 
-export default function DealCard({ item, rank, onVisited }: { item: PricedItem; rank: number; onVisited: (storeId: string, visited: boolean) => void }) {
+export default function DealCard({ item, rank, onVisited, onPointMe }: { item: PricedItem; rank: number; onVisited: (storeId: string, visited: boolean) => void; onPointMe?: () => void }) {
   const { product: p, store: s, tax } = item;
   const [busy, setBusy] = useState(false);
   const link = p.url || s.menuUrl || s.website;
@@ -34,7 +35,7 @@ export default function DealCard({ item, rank, onVisited }: { item: PricedItem; 
   const taxTitle = tax.included ? 'Shelf price already includes all taxes' : `Local ${$(tax.local)} · CA excise ${$(tax.excise)} · Sales ${$(tax.sales)}`;
 
   return (
-    <article className={`rounded-2xl p-4 space-y-3 border ${item.closerPick ? 'bg-orange-500/10 border-orange-500 ring-1 ring-orange-500/40' : 'bg-[#111c18] border-zinc-800'}`}>
+    <article className={item.closerPick ? 'rounded-2xl p-4 space-y-3 border bg-orange-500/10 border-orange-500 ring-1 ring-orange-500/40' : cardClass('weed')}>
       {item.closerPick && (
         <div className="-mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs">
           <span className="rounded-md bg-orange-500 text-black font-semibold px-2 py-0.5">📍 Closer pick</span>
@@ -43,22 +44,11 @@ export default function DealCard({ item, rank, onVisited }: { item: PricedItem; 
           </span>
         </div>
       )}
-      {/* Store row */}
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-zinc-500">#{rank}</span>
-            <h3 className="font-semibold truncate">{s.name}</h3>
-          </div>
-          <p className="text-xs text-zinc-400 truncate">
-            {item.mode === 'pickup' ? `${item.distanceMiles.toFixed(1)} mi · ` : ''}{s.address ? `${s.address}, ` : ''}{s.city}
-          </p>
-        </div>
-        <div className="text-right shrink-0">
-          <div className="text-2xl font-bold text-green-400 leading-none">{$(item.perUnit)}<span className="text-sm text-green-400 font-normal">{item.unitLabel}</span></div>
-          <div className="text-xs text-zinc-400 mt-1">{$(item.otd)} out the door</div>
-        </div>
-      </div>
+      <PlaceHeader accent="weed" rank={rank} name={s.name}
+        distanceMiles={item.mode === 'pickup' ? item.distanceMiles : undefined}
+        address={[s.address, s.city].filter(Boolean).join(', ')}
+        open={item.open ?? { isOpen: null }}
+        price={$(item.perUnit)} unit={item.unitLabel} priceNote={`${$(item.otd)} out the door`} />
 
       {/* Product */}
       <div>
@@ -116,8 +106,11 @@ export default function DealCard({ item, rank, onVisited }: { item: PricedItem; 
 
       <FinePrint items={item.finePrint} />
 
-      {link && (
-        <a href={link} target="_blank" rel="noreferrer" className="inline-block text-xs text-green-400 underline underline-offset-2">Open menu ↗</a>
+      {(link || (onPointMe && s.pickup)) && (
+        <div className="flex flex-wrap gap-4">
+          {onPointMe && s.pickup && <CardLink accent="weed" onClick={onPointMe}>🧭 Point me</CardLink>}
+          {link && <CardLink accent="weed" href={link}>Open menu ↗</CardLink>}
+        </div>
       )}
     </article>
   );

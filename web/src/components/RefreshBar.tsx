@@ -14,8 +14,9 @@ function ago(iso?: string) {
 const SOURCE_NAMES: Record<string, string> = { osm: 'Places (OpenStreetMap)', 'bar-websites': 'Bar websites' };
 
 /** Refresh button + "updated X ago" + per-source status (tap to see which sources failed). */
-export default function RefreshBar({ onRefreshed, statusFn = api.status, refreshFn = api.refresh }: {
+export default function RefreshBar({ onRefreshed, statusFn = api.status, refreshFn = api.refresh, accent = 'weed' }: {
   onRefreshed: () => void;
+  accent?: 'weed' | 'beer';
   statusFn?: () => Promise<RefreshStatus>;
   refreshFn?: () => Promise<RefreshStatus>;
 }) {
@@ -44,8 +45,8 @@ export default function RefreshBar({ onRefreshed, statusFn = api.status, refresh
 
   return (
     <div className="relative flex items-center gap-2">
-      <button onClick={() => setShowDetail(!showDetail)} className="text-xs text-zinc-400 text-right">
-        {status?.running ? 'Refreshing…' : `Updated ${ago(status?.lastRefreshAt)}`}
+      <button onClick={() => setShowDetail(!showDetail)} className="text-xs text-zinc-400 text-right whitespace-nowrap" title="When prices were last updated">
+        {status?.running ? 'Refreshing…' : <><span className="hidden sm:inline">Updated </span>{ago(status?.lastRefreshAt)}</>}
         {failed.length > 0 && <span className="text-amber-400"> · {failed.length} source{failed.length > 1 ? 's' : ''} failed</span>}
       </button>
       <button
@@ -61,7 +62,7 @@ export default function RefreshBar({ onRefreshed, statusFn = api.status, refresh
           wasRunning.current = true;
           setStatus(s);
         }}
-        className="rounded-full bg-green-500 text-black w-9 h-9 grid place-items-center font-bold disabled:opacity-60"
+        className={`rounded-full ${accent === 'beer' ? 'bg-amber-500' : 'bg-green-500'} text-black w-9 h-9 grid place-items-center font-bold disabled:opacity-60`}
         aria-label="Refresh prices"
       >
         <span className={status?.running ? 'animate-spin inline-block' : ''}>↻</span>

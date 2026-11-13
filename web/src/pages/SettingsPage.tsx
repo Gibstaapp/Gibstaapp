@@ -5,7 +5,7 @@ import ProfileForm from '../components/ProfileForm.tsx';
 
 const randomTopic = () => `gibstaapp-${crypto.getRandomValues(new Uint32Array(2)).join('').slice(0, 14)}`;
 
-export default function SettingsPage({ profile, onProfile, onChangeServer }: { profile: UserProfile; onProfile: (p: UserProfile) => void; onChangeServer: () => void }) {
+export default function SettingsPage({ profile, onProfile, onChangeServer, accent = 'weed' }: { accent?: 'weed' | 'beer'; profile: UserProfile; onProfile: (p: UserProfile) => void; onChangeServer: () => void }) {
   const [draft, setDraft] = useState(profile);
   const [msg, setMsg] = useState<string | null>(null);
   const [stores, setStores] = useState<StoreRow[]>([]);
@@ -14,6 +14,7 @@ export default function SettingsPage({ profile, onProfile, onChangeServer }: { p
   useEffect(() => { api.stores().then(setStores).catch(() => {}); }, []);
   useEffect(() => setDraft(profile), [profile]);
 
+  const btn = accent === 'beer' ? 'bg-amber-500' : 'bg-green-500';
   const dirty = JSON.stringify(draft) !== JSON.stringify(profile);
   const save = async (p = draft) => {
     try {
@@ -28,12 +29,12 @@ export default function SettingsPage({ profile, onProfile, onChangeServer }: { p
   const downloadUrl = `${serverUrl() || location.origin}/download`;
 
   return (
-    <div className="p-4 space-y-8 pt-[calc(env(safe-area-inset-top)+1rem)]">
+    <div className="p-4 space-y-8">
       <section>
         <h2 className="text-lg font-semibold mb-1">You</h2>
         <ProfileForm value={draft} onChange={setDraft} />
         <div className="flex items-center gap-3 mt-3">
-          <button disabled={!dirty} onClick={() => save()} className="rounded-lg bg-green-500 text-black font-semibold px-4 py-2 disabled:opacity-40">Save</button>
+          <button disabled={!dirty} onClick={() => save()} className={`rounded-lg ${btn} text-black font-semibold px-4 py-2 disabled:opacity-40`}>Save</button>
           {msg && <span className="text-sm text-zinc-400">{msg}</span>}
         </div>
       </section>
@@ -83,10 +84,10 @@ export default function SettingsPage({ profile, onProfile, onChangeServer }: { p
         <h2 className="text-lg font-semibold mb-1">Share with friends</h2>
         {publicUrl ? (
           <>
-            <p className="text-sm text-zinc-400">Works on any phone, on Wi-Fi or data. They'll need the passcode.</p>
+            <p className="text-sm text-zinc-400">Works on any phone, on Wi-Fi or data.{STATIC ? '' : " They'll need the passcode."}</p>
             <div className="flex gap-2 mt-2">
               <input readOnly value={publicUrl} className="flex-1 bg-zinc-900 border border-zinc-700 rounded-lg px-2 py-2 font-mono text-xs" />
-              <button onClick={() => navigator.clipboard?.writeText(publicUrl).then(() => { setMsg('Link copied'); setTimeout(() => setMsg(null), 2000); })} className="rounded-lg bg-green-500 text-black font-semibold px-3 text-xs">Copy</button>
+              <button onClick={() => navigator.clipboard?.writeText(publicUrl).then(() => { setMsg('Link copied'); setTimeout(() => setMsg(null), 2000); })} className={`rounded-lg ${btn} text-black font-semibold px-3 text-xs`}>Copy</button>
             </div>
             <p className="text-xs text-zinc-500 mt-1">{STATIC ? 'This link is permanent. Prices refresh every morning.' : 'This link changes if the PC restarts. With an ntfy topic set, the new link gets pushed to you.'}</p>
           </>

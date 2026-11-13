@@ -1,6 +1,7 @@
-import type { Category, Deal, DeliveryOption, Mode, PricedItem, Product, Store, StoreOverride, UserProfile } from '@gib/shared';
+import type { Category, Deal, DeliveryOption, Mode, OpenStatus, PricedItem, Product, Store, StoreOverride, UserProfile } from '@gib/shared';
 import { bestDeal, finePrintFor } from './deals.ts';
 import { computeTax } from './taxes.ts';
+import { openState, wallClockIn, STORE_TIME_ZONE } from '../hours.ts';
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -38,6 +39,8 @@ function cheapestDelivery(opts: DeliveryOption[]): DeliveryOption | undefined {
 export interface PriceOptions {
   mode: Mode;
   now?: Date;
+  /** The store's open status, if the caller already worked it out (saves re-parsing hours per product). */
+  open?: OpenStatus;
 }
 
 /** Price one product for this user. Returns null when the store can't serve the requested mode. */
@@ -86,6 +89,7 @@ export function priceItem(product: Product, rawStore: Store, deals: Deal[], prof
     perUnit,
     unitLabel,
     distanceMiles: round2(haversineMiles(profile.lat, profile.lng, store.lat, store.lng)),
+    open: opts.open ?? openState(store.hours, wallClockIn(STORE_TIME_ZONE, now)),
     finePrint: finePrintFor(best.used, product.price, now),
   };
 }
@@ -97,6 +101,8 @@ export interface RankQuery {
   search?: string;
   limit?: number;
   now?: Date;
+  /** Hide stores we know are closed right now. Stores with unknown hours stay (labelled "Hours not listed"). */
+  openNow?: boolean;
 }
 
 /** Price everything and sort cheapest-per-unit first. */
@@ -115,6 +121,8 @@ export function rankItems(
     dealsByStore.set(d.storeId, arr);
   }
   const search = q.search?.toLowerCase().trim();
+  const now = q.now ?? new Date();
+  const openByStore = new Map<string, OpenStatus>();
   const out: PricedItem[] = [];
   for (const p of products) {
     if (q.category && p.category !== q.category) continue;
@@ -123,7 +131,11 @@ export function rankItems(
     if (!store) continue;
     const ov = overrides.get(store.id);
     if (ov?.hidden) continue;
-    const item = priceItem(p, store, dealsByStore.get(store.id) ?? [], profile, { mode: q.mode, now: q.now }, ov);
+    let open = openByStore.get(store.id);
+    // Store hours are San Diego time, wherever the phone is.
+    if (!open) openByStore.set(store.id, (open = openState(store.hours, wallClockIn(STORE_TIME_ZONE, now))));
+    if (q.openNow && open.isOpen === false) continue;
+    const item = priceItem(p, store, dealsByStore.get(store.id) ?? [], profile, { mode: q.mode, now, open }, ov);
     if (!item) continue;
     if (q.maxMiles != null && q.mode === 'pickup' && item.distanceMiles > q.maxMiles) continue;
     out.push(item);

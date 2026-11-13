@@ -17,6 +17,7 @@ import { config } from './config.ts';
 import { refreshAll } from './refresh.ts';
 import { refreshBeer } from './beer/refresh.ts';
 import { rankItems } from './pricing/engine.ts';
+import { mergeResults } from './normalize.ts';
 import './sources/register.ts';
 
 export interface WeedSnapshot { stores: Store[]; products: Product[]; deals: Deal[]; status: RefreshStatus }
@@ -47,13 +48,16 @@ export function mergeWeed(snaps: WeedSnapshot[]): WeedSnapshot | null {
     const best = [...snaps].sort((a, b) => okAt(b.status, src) - okAt(a.status, src))[0];
     products.push(...best.products.filter((p) => p.source === src));
     deals.push(...best.deals.filter((d) => d.source === src));
-    for (const s of best.stores) if (s.sources.some((x) => x.source === src)) storeById.set(s.id, s);
+    // A store can come from several snapshots (merged across sources): keep hours from whichever one has them.
+    for (const s of best.stores) if (s.sources.some((x) => x.source === src)) storeById.set(s.id, { ...s, hours: s.hours ?? storeById.get(s.id)?.hours });
     const st = best.status.sources.find((x) => x.source === src);
     if (st) statuses.push(st);
   }
-  const used = new Set(products.map((p) => p.storeId));
+  // The same shop can arrive under two ids (e.g. "dutchie:…" from the PC and "weedmaps:…" from GitHub): fold them together.
+  const merged = mergeResults([{ stores: [...storeById.values()], products, deals }]);
+  const used = new Set(merged.products.map((p) => p.storeId));
   return {
-    stores: [...storeById.values()].filter((s) => used.has(s.id)), products, deals,
+    stores: merged.stores.filter((s) => used.has(s.id)), products: merged.products, deals: merged.deals,
     status: { running: false, lastRefreshAt: snaps.map((s) => s.status.lastRefreshAt ?? '').sort().pop(), sources: statuses },
   };
 }

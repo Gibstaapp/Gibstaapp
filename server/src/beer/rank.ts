@@ -44,7 +44,7 @@ export function rankVenues(
     if (q.kind && q.kind !== 'all' && v.kind !== q.kind) continue;
     const distanceMiles = haversineMiles(q.lat, q.lng, v.lat, v.lng);
     if (q.maxMiles && distanceMiles > q.maxMiles) continue;
-    const { isOpen, label: hoursLabel } = openState(v.openingHours, now);
+    const { isOpen, label: hoursLabel, closingSoon } = openState(v.openingHours, now);
     if (q.openNow && isOpen === false) continue;
 
     const vp = (byVenue.get(v.id) ?? []).slice().sort((a, b) => perPint(a) - perPint(b));
@@ -58,6 +58,7 @@ export function rankVenues(
       bearing: Math.round(bearingDegrees(q.lat, q.lng, v.lat, v.lng) * 10) / 10,
       isOpen,
       hoursLabel,
+      ...(closingSoon ? { closingSoon } : {}),
       best,
       happyHourNow: hh.some((h) => windowActive(h, now)) || applicable.some((p) => p.kind === 'happy_hour'),
       happyHours: hh,
@@ -73,7 +74,9 @@ export function rankVenues(
   for (const r of out) {
     const price = r.best ? perPint(r.best) : typical + 2;
     const closedPenalty = r.isOpen === false ? 1000 : 0;
-    r.score = closedPenalty + (sort === 'closest' ? r.distanceMiles : sort === 'cheapest' ? price + r.distanceMiles * 0.01 + (r.best ? 0 : 500) : price * 0.5 + r.distanceMiles * 0.5 + (r.happyHourNow ? -0.5 : 0));
+    // "Open now": places we know are open come first; places with no hours listed (most of OpenStreetMap) after them.
+    const unknownPenalty = q.openNow && r.isOpen === null ? 100 : 0;
+    r.score = closedPenalty + unknownPenalty +(sort === 'closest' ? r.distanceMiles : sort === 'cheapest' ? price + r.distanceMiles * 0.01 + (r.best ? 0 : 500) : price * 0.5 + r.distanceMiles * 0.5 + (r.happyHourNow ? -0.5 : 0));
   }
   out.sort((a, b) => a.score - b.score);
   return out.slice(0, q.limit ?? 150);
