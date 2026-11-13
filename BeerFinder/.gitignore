@@ -1,0 +1,21 @@
+﻿# Python
+__pycache__/
+*.pyc
+venv/
+.env
+.pytest_cache/
+
+# Generated SQLite DB (seeded from fixtures at runtime)
+*.db
+
+# Android
+*.iml
+.gradle/
+local.properties
+.idea/
+build/
+app/build/
+*.apk
+
+# OS
+.DS_Store

@@ -1,0 +1,7 @@
+{
+  "appId": "com.gibstaapp.app",
+  "appName": "Gibstaapp",
+  "webDir": "dist",
+  "server": { "androidScheme": "http", "cleartext": true },
+  "android": { "allowMixedContent": true }
+}

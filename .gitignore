@@ -1,0 +1,33 @@
+node_modules/
+dist/
+*.db
+*.db-journal
+.env
+web/android/app/build/
+web/android/.gradle/
+server/data/
+tools/
+
+# BeerFinder prototype junk
+BeerFinder/SteamLink*
+BeerFinder/**/__pycache__/
+BeerFinder/**/.pytest_cache/
+BeerFinder/beerfinder.db
+BeerFinder/android/local.properties
+BeerFinder/android/.gradle/
+BeerFinder/android/**/build/
+
+# Python
+.pytest_cache/
+__pycache__/
+*.pyc
+
+# Android / build outputs
+web/android/local.properties
+web/android/build/
+web/android/app/src/main/assets/public/
+*.apk
+*.log
+
+# Local-only Claude settings
+.claude/settings.local.json

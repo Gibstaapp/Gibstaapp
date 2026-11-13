@@ -1,0 +1,185 @@
+[
+  {
+    "venue_id": "v1",
+    "name": "Harbor Town Pub",
+    "venue_type": "bar",
+    "open_hour": 11,
+    "close_hour": 24,
+    "latitude": 32.7277,
+    "longitude": -117.2246,
+    "address": "1125 Rosecrans St, San Diego, CA 92106",
+    "beers": [
+      { "beer_name": "Point Loma Lager", "base_price": 7.00, "happy_hour_price": 5.00, "game_day_deal": { "team": "Padres", "deal_price": 4.00 } },
+      { "beer_name": "IPA Draft", "base_price": 8.00, "happy_hour_price": 6.00, "game_day_deal": null }
+    ]
+  },
+  {
+    "venue_id": "v2",
+    "name": "The Loma Club",
+    "venue_type": "bar",
+    "open_hour": 11,
+    "close_hour": 22,
+    "latitude": 32.7354,
+    "longitude": -117.2163,
+    "address": "2960 Truxtun Rd, San Diego, CA 92106",
+    "beers": [
+      { "beer_name": "Liberty Station Amber", "base_price": 7.50, "happy_hour_price": 5.50, "game_day_deal": { "team": "Padres", "deal_price": 4.50 } }
+    ]
+  },
+  {
+    "venue_id": "v3",
+    "name": "Fathom Bistro Bait & Tackle",
+    "venue_type": "bar",
+    "open_hour": 11,
+    "close_hour": 20,
+    "latitude": 32.7128,
+    "longitude": -117.2343,
+    "address": "1776 Shelter Island Dr, San Diego, CA 92106",
+    "beers": [
+      { "beer_name": "San Diego Pale Ale", "base_price": 6.50, "happy_hour_price": 4.50, "game_day_deal": { "team": "Padres", "deal_price": 3.75 } }
+    ]
+  },
+  {
+    "venue_id": "v4",
+    "name": "Jimmy's Famous American Tavern",
+    "venue_type": "bar",
+    "open_hour": 11,
+    "close_hour": 23,
+    "latitude": 32.7242,
+    "longitude": -117.2288,
+    "address": "1733 Anchorage Ln, San Diego, CA 92106",
+    "beers": [
+      { "beer_name": "Famous House Blonde", "base_price": 8.00, "happy_hour_price": 6.00, "game_day_deal": { "team": "Padres", "deal_price": 5.00 } }
+    ]
+  },
+  {
+    "venue_id": "v5",
+    "name": "Bay City Brewing Co.",
+    "venue_type": "bar",
+    "open_hour": 12,
+    "close_hour": 22,
+    "latitude": 32.7562,
+    "longitude": -117.2081,
+    "address": "3760 Hancock St, San Diego, CA 92110",
+    "beers": [
+      { "beer_name": "Juicatronic IPA", "base_price": 7.00, "happy_hour_price": 5.00, "game_day_deal": { "team": "Padres", "deal_price": 4.00 } }
+    ]
+  },
+  {
+    "venue_id": "v6",
+    "name": "Pizza Port Ocean Beach",
+    "venue_type": "bar",
+    "open_hour": 11,
+    "close_hour": 24,
+    "latitude": 32.7483,
+    "longitude": -117.2483,
+    "address": "1956 Bacon St, San Diego, CA 92107",
+    "beers": [
+      { "beer_name": "Swami's IPA", "base_price": 6.00, "happy_hour_price": 4.00, "game_day_deal": { "team": "Padres", "deal_price": 3.50 } }
+    ]
+  },
+  {
+    "venue_id": "v7",
+    "name": "Phil's BBQ",
+    "venue_type": "bar",
+    "open_hour": 11,
+    "close_hour": 21,
+    "latitude": 32.7547,
+    "longitude": -117.2052,
+    "address": "3750 Sports Arena Blvd, San Diego, CA 92110",
+    "beers": [
+      { "beer_name": "Barbecue Pilsner", "base_price": 6.50, "happy_hour_price": 5.00, "game_day_deal": null }
+    ]
+  },
+  {
+    "venue_id": "v8",
+    "name": "Mitch's Seafood",
+    "venue_type": "bar",
+    "open_hour": 11,
+    "close_hour": 21,
+    "latitude": 32.7245,
+    "longitude": -117.2272,
+    "address": "1403 Scott St, San Diego, CA 92106",
+    "beers": [
+      { "beer_name": "Fisherman IPA", "base_price": 7.50, "happy_hour_price": 5.50, "game_day_deal": { "team": "Padres", "deal_price": 4.25 } }
+    ]
+  },
+  {
+    "venue_id": "v9",
+    "name": "Eppig Brewing Waterfront Brewery",
+    "venue_type": "bar",
+    "open_hour": 14,
+    "close_hour": 22,
+    "latitude": 32.7154,
+    "longitude": -117.2307,
+    "address": "2817 Dickens St, San Diego, CA 92106",
+    "beers": [
+      { "beer_name": "10:45 To Denver IPA", "base_price": 7.50, "happy_hour_price": 5.00, "game_day_deal": { "team": "Padres", "deal_price": 4.00 } }
+    ]
+  },
+  {
+    "venue_id": "v10",
+    "name": "Point Loma Seafoods",
+    "venue_type": "bar",
+    "open_hour": 9,
+    "close_hour": 20,
+    "latitude": 32.7176,
+    "longitude": -117.2300,
+    "address": "2805 Emerson St, San Diego, CA 92106",
+    "beers": [
+      { "beer_name": "Harbor Light Draft", "base_price": 6.00, "happy_hour_price": 4.50, "game_day_deal": null }
+    ]
+  },
+  {
+    "venue_id": "s1",
+    "name": "Rosecrans Liquor & Market",
+    "venue_type": "store",
+    "open_hour": 8,
+    "close_hour": 26,
+    "latitude": 32.7301,
+    "longitude": -117.2231,
+    "address": "1201 Rosecrans St, San Diego, CA 92106",
+    "beers": [
+      { "beer_name": "Tecate Tallboy 24oz", "base_price": 2.75, "happy_hour_price": null, "game_day_deal": null }
+    ]
+  },
+  {
+    "venue_id": "s2",
+    "name": "Vons Midway",
+    "venue_type": "store",
+    "open_hour": 6,
+    "close_hour": 24,
+    "latitude": 32.7489,
+    "longitude": -117.2098,
+    "address": "3912 Rosecrans St, San Diego, CA 92110",
+    "beers": [
+      { "beer_name": "Coors Banquet Tallboy 24oz", "base_price": 2.25, "happy_hour_price": null, "game_day_deal": null }
+    ]
+  },
+  {
+    "venue_id": "s3",
+    "name": "Point Loma Bottle Shop",
+    "venue_type": "store",
+    "open_hour": 10,
+    "close_hour": 22,
+    "latitude": 32.7338,
+    "longitude": -117.2289,
+    "address": "2690 Historic Decatur Rd, San Diego, CA 92106",
+    "beers": [
+      { "beer_name": "Modelo Especial 24oz", "base_price": 2.99, "happy_hour_price": null, "game_day_deal": { "team": "Padres", "deal_price": 2.49 } }
+    ]
+  },
+  {
+    "venue_id": "s4",
+    "name": "7-Eleven Rosecrans",
+    "venue_type": "store",
+    "open_hour": 0,
+    "close_hour": 24,
+    "latitude": 32.7211,
+    "longitude": -117.2258,
+    "address": "1365 Rosecrans St, San Diego, CA 92106",
+    "beers": [
+      { "beer_name": "Bud Light Tallboy 24oz", "base_price": 2.50, "happy_hour_price": null, "game_day_deal": null }
+    ]
+  }
+]

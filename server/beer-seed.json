@@ -1,0 +1,38 @@
+{
+  "_readme": [
+    "Hand-entered beer deals and places, committed to git so we can both add to it.",
+    "Use this for deals we've seen in person, on a chalkboard, on Instagram, or got from the owner.",
+    "Match a place by its exact name (as shown in the app) plus 'near' [lat, lng], or by 'venueId' (shown in the app's place details).",
+    "kind: regular | happy_hour | game_day | special. days: 0=Sun..6=Sat. start/end: 24h 'HH:MM'.",
+    "game_day deals also need team 'Padres' and gameDayRule 'game_day' (any day they play) or 'after_win' (day after a win).",
+    "source 'team' = we confirmed it with the bar ourselves (shows a 'Verified' badge).",
+    "Delete the example entries below once we have real ones; they're marked 'example': true and ignored."
+  ],
+  "venues": [
+    {
+      "example": true,
+      "name": "Example Taproom",
+      "kind": "bar",
+      "lat": 32.7157,
+      "lng": -117.1611,
+      "address": "123 Example St, San Diego",
+      "openingHours": "Mo-Su 11:00-24:00"
+    }
+  ],
+  "prices": [
+    {
+      "example": true,
+      "name": "Example Taproom",
+      "near": [32.7157, -117.1611],
+      "item": "Draft pints",
+      "price": 5,
+      "size": "pint",
+      "kind": "happy_hour",
+      "days": [1, 2, 3, 4, 5],
+      "start": "15:00",
+      "end": "18:00",
+      "source": "team",
+      "note": "Owner confirmed in person"
+    }
+  ]
+}

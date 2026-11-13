@@ -1,0 +1,110 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "BeerFinder API",
+    "version": "1.1.0",
+    "description": "Contract owned by Claude Code (Lead Architect). LOCKED. Governs the FastAPI backend in /backend and the Jetpack Compose Android DTOs, which MUST conform exactly. v1.1 adds venue_type (store|bar), business hours + is_open, and type/open filtering.",
+    "x-contract-status": "LOCKED",
+    "x-mock-mode": "The backend is offline by design (MOCK_MODE): venue/beer data is seeded into local SQLite from fixtures/point_loma_venues.json. No external API keys are required. The Padres game-day deal is simulated via /debug/padres-win. 'is_open' is computed from each venue's hours vs the query time (now by default, or at_hour/at_minute override for deterministic testing).",
+    "x-test-zone": "Point Loma, San Diego (32.7150, -117.2300)"
+  },
+  "servers": [
+    { "url": "http://localhost:8000", "description": "Local dev / MOCK_MODE" }
+  ],
+  "paths": {
+    "/venues/nearest": {
+      "get": {
+        "operationId": "getNearestVenues",
+        "summary": "Rank venues by a weighted price+distance score, filtered by type/open, nearest/cheapest first.",
+        "description": "Returns seeded venues enriched with great-circle distance (miles), bearing (deg), cheapest effective beer price (happy-hour + active Padres deal), is_open (computed from hours vs query time), and a composite score = effective_price*wp + distance_miles*wd. Sorted by score ascending.",
+        "parameters": [
+          { "name": "lat", "in": "query", "required": false, "schema": { "type": "number", "format": "double", "default": 32.7150 } },
+          { "name": "lon", "in": "query", "required": false, "schema": { "type": "number", "format": "double", "default": -117.2300 } },
+          { "name": "wp", "in": "query", "required": false, "description": "Price weight.", "schema": { "type": "number", "format": "double", "default": 0.5 } },
+          { "name": "wd", "in": "query", "required": false, "description": "Distance weight.", "schema": { "type": "number", "format": "double", "default": 0.5 } },
+          { "name": "venue_type", "in": "query", "required": false, "description": "Filter by category.", "schema": { "type": "string", "enum": ["store", "bar", "all"], "default": "all" } },
+          { "name": "open_now", "in": "query", "required": false, "description": "If true, only venues open at the query time are returned.", "schema": { "type": "boolean", "default": false } },
+          { "name": "at_hour", "in": "query", "required": false, "description": "Override 'now' hour (0-23) for is_open; defaults to server local time.", "schema": { "type": "integer", "minimum": 0, "maximum": 23 } },
+          { "name": "at_minute", "in": "query", "required": false, "description": "Override 'now' minute (0-59); used with at_hour.", "schema": { "type": "integer", "minimum": 0, "maximum": 59, "default": 0 } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Ranked venues, ascending by score.",
+            "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/RankedVenue" } } } }
+          },
+          "422": { "description": "Validation error (out-of-range parameter)." }
+        }
+      }
+    },
+    "/status/padres": {
+      "get": {
+        "operationId": "getPadresStatus",
+        "summary": "Current Padres game-day deal state.",
+        "responses": { "200": { "description": "Deal state.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PadresStatus" } } } } }
+      }
+    },
+    "/debug/padres-win": {
+      "post": {
+        "operationId": "setPadresWin",
+        "summary": "Toggle the simulated Padres game-day deal (MOCK_MODE control).",
+        "parameters": [ { "name": "active", "in": "query", "required": true, "schema": { "type": "boolean" } } ],
+        "responses": { "200": { "description": "New deal state.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PadresStatus" } } } }, "422": { "description": "Missing/invalid 'active'." } }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "PadresStatus": {
+        "type": "object",
+        "required": ["active"],
+        "additionalProperties": false,
+        "properties": { "active": { "type": "boolean" } }
+      },
+      "GameDayDeal": {
+        "type": "object",
+        "required": ["team", "deal_price"],
+        "additionalProperties": false,
+        "properties": { "team": { "type": "string", "example": "Padres" }, "deal_price": { "type": "number", "format": "double", "minimum": 0 } }
+      },
+      "Beer": {
+        "type": "object",
+        "required": ["beer_name", "base_price"],
+        "additionalProperties": false,
+        "properties": {
+          "beer_name": { "type": "string" },
+          "base_price": { "type": "number", "format": "double", "minimum": 0 },
+          "happy_hour_price": { "type": ["number", "null"], "format": "double", "minimum": 0 },
+          "game_day_deal": { "oneOf": [ { "$ref": "#/components/schemas/GameDayDeal" }, { "type": "null" } ] }
+        }
+      },
+      "RankedVenue": {
+        "type": "object",
+        "required": [
+          "venue_id", "name", "venue_type", "latitude", "longitude", "address",
+          "distance_miles", "bearing_degrees", "effective_price", "cheapest_beer_name",
+          "is_padres_deal", "is_open", "open_hour", "close_hour", "hours_label", "score", "beers"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "venue_id": { "type": "string" },
+          "name": { "type": "string" },
+          "venue_type": { "type": "string", "enum": ["store", "bar"], "description": "store = grocery/liquor (cheap tallboys); bar = bar/brewpub/restaurant." },
+          "latitude": { "type": "number", "format": "double", "minimum": -90, "maximum": 90 },
+          "longitude": { "type": "number", "format": "double", "minimum": -180, "maximum": 180 },
+          "address": { "type": "string" },
+          "distance_miles": { "type": "number", "format": "double", "minimum": 0, "description": "Haversine distance in miles, rounded to 3 decimals." },
+          "bearing_degrees": { "type": "number", "format": "double", "minimum": 0, "exclusiveMaximum": 360, "description": "Initial bearing observer->venue, [0,360), 2 decimals. Drives the compass needle." },
+          "effective_price": { "type": "number", "format": "double", "minimum": 0, "description": "Cheapest beer price after happy-hour and (if active) Padres deal, 2 decimals." },
+          "cheapest_beer_name": { "type": "string" },
+          "is_padres_deal": { "type": "boolean" },
+          "is_open": { "type": "boolean", "description": "Whether the venue is open at the query time." },
+          "open_hour": { "type": "number", "format": "double", "minimum": 0, "maximum": 24, "description": "Opening hour (24h). May be fractional for half-hours." },
+          "close_hour": { "type": "number", "format": "double", "minimum": 0, "maximum": 30, "description": "Closing hour (24h). Values >24 indicate past-midnight closing (e.g. 26 = 2 AM)." },
+          "hours_label": { "type": "string", "description": "Human-readable hours, e.g. '11:00–24:00' or '08:00–02:00'." },
+          "score": { "type": "number", "format": "double", "minimum": 0, "description": "effective_price*wp + distance_miles*wd, 4 decimals. Lower is better." },
+          "beers": { "type": "array", "items": { "$ref": "#/components/schemas/Beer" } }
+        }
+      }
+    }
+  }
+}

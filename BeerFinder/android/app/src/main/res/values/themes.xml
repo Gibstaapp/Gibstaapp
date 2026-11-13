@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Base manifest theme. The actual UI styling is driven by Compose
+         MaterialTheme in setContent; this only needs to be a valid no-action-bar
+         host theme, so we extend a platform theme to avoid pulling in the
+         Material Components (View) library. -->
+    <style name="Theme.BeerFinder" parent="android:Theme.Material.Light.NoActionBar" />
+</resources>

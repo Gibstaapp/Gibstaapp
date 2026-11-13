@@ -1,0 +1,30 @@
+{
+  "name": "@gib/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "refresh": "tsx src/cli-refresh.ts",
+    "test": "vitest run",
+    "typecheck": "tsc -p .",
+    "beer": "tsx src/cli-beer.ts"
+  },
+  "dependencies": {
+    "@fastify/cors": "^11.4.2",
+    "@fastify/static": "^10.1.10",
+    "@gib/shared": "*",
+    "fastify": "^5.12.8",
+    "node-cron": "^4.6.0",
+    "opening_hours": "^3.15.0",
+    "playwright": "^1.65.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "@types/node-cron": "^3.0.11",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.0"
+  }
+}
