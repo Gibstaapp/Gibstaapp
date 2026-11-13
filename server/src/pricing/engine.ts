@@ -1,3 +1,4 @@
+import { MAX_RESULT_MILES } from '@gib/shared';
 import type { Category, Deal, DeliveryOption, Mode, OpenStatus, PricedItem, Product, Store, StoreOverride, UserProfile } from '@gib/shared';
 import { bestDeal, finePrintFor } from './deals.ts';
 import { computeTax } from './taxes.ts';
@@ -138,6 +139,7 @@ export function rankItems(
     const item = priceItem(p, store, dealsByStore.get(store.id) ?? [], profile, { mode: q.mode, now, open }, ov);
     if (!item) continue;
     if (q.maxMiles != null && q.mode === 'pickup' && item.distanceMiles > q.maxMiles) continue;
+    if (item.distanceMiles > MAX_RESULT_MILES) continue; // never more than 100 mi from the home area code
     // Delivery zones were worked out for San Diego: a store this far from home doesn't deliver to you.
     if (q.mode === 'delivery' && item.distanceMiles > DELIVERY_MAX_MILES) continue;
     out.push(item);

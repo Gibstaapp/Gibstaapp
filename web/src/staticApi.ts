@@ -130,7 +130,7 @@ export const staticApi = {
       if (!r.item?.trim() || !(price > 0 && price < 100)) throw new Error('Need a beer name and a price');
       const p: BeerPrice = {
         id: `user:${crypto.randomUUID()}`, venueId: r.venueId, item: r.item.trim().slice(0, 60), price: Math.round(price * 100) / 100,
-        ...(r.currency === 'EUR' ? { currency: 'EUR' as const } : {}),
+        ...(r.currency === 'EUR' ? { currency: 'EUR' as const } : {}), // set from the place's location by the report form
         size: r.size, kind: r.kind, days: r.days, start: r.start, end: r.end, source: 'user', snippet: r.note?.trim() || undefined,
         reportedAt: new Date().toISOString(),
       };

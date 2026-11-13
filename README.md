@@ -18,7 +18,9 @@ Both modes have a **🧭 Compass** that points at the place you picked, plus lis
 - **🇺🇸 U.S.:** San Diego County ZIPs. Weed + beer, dollars, miles.
 - **🇪🇺 Europe:** 259 greater-Athens postcodes (e.g. 105 58 · Plaka), grouped by municipality. Beer only: recreational
   cannabis isn't legal in Greece, so the Weed switch is greyed out and explains why. Euros, kilometres, Athens time and
-  Greek public holidays. Athens bars are in the daily data; prices so far come from bars' own menus (see `server/beer-seed.json`).
+  Greek public holidays. Athens bars are in the daily data. Euro prices come from the bars' own websites (a separate daily step,
+  "Athens bar menus (€)") and from menus we checked by hand (`server/beer-seed.json`).
+- Results never come from more than 100 miles from your home area code, so San Diego and Athens never mix.
 
 Shared by both modes:
 

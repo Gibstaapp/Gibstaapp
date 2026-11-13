@@ -6,6 +6,7 @@ import { beerRepo, repo, type BeerArea } from '../db.ts';
 import { haversineMiles } from '../pricing/engine.ts';
 import { fetchOsmVenues } from './osm.ts';
 import { crawlVenueSites } from './websites.ts';
+import { inGreece } from '../hours.ts';
 
 /**
  * Beer data is location-based: wherever someone opens the beer tab, we load the places around
@@ -158,10 +159,11 @@ export function refreshBeer(opts: { forceOsm?: boolean } = {}): Promise<SourceSt
     // 2. Hand-entered places/prices.
     applySeed();
 
-    // 3. Bar & brewery websites (happy hours, menu prices) for every area in use.
+    // 3. Bar & brewery websites (happy hours, menu prices), dollars. Athens has its own step below.
+    const usVenues = inUse.filter((v) => !inGreece(v));
     try {
-      const r = await crawlVenueSites(inUse, log('web'));
-      beerRepo.replaceWebsiteFor(inUse.filter((v) => v.website).map((v) => v.id), r.prices, r.happyHours);
+      const r = await crawlVenueSites(usVenues, log('web'));
+      beerRepo.replaceWebsiteFor(usVenues.filter((v) => v.website).map((v) => v.id), r.prices, r.happyHours);
       areas = beerRepo.areas();
       for (const a of areas) a.crawledAt = at();
       beerRepo.setAreas(areas);
@@ -170,8 +172,26 @@ export function refreshBeer(opts: { forceOsm?: boolean } = {}): Promise<SourceSt
       statuses.push({ source: 'bar-websites', ok: false, stores: 0, products: 0, error: (e as Error).message, finishedAt: at() });
     }
 
+    // 4. Separate step: Athens bars' own websites, read for euro prices (Greek or English).
+    statuses.push(await refreshAthensMenus(inUse.filter((v) => inGreece(v))));
+
     beerRepo.setStatus({ running: false, lastRefreshAt: at(), sources: statuses });
     return statuses;
   })().finally(() => { running = null; });
   return running;
+}
+
+/**
+ * Athens: read the bars' own websites for euro prices and happy hours. Runs every morning with the beer refresh,
+ * as its own step with its own status line ("Athens bar menus (€)"); `npm run athens -w server` runs just this.
+ * A site that fails keeps its previous prices (only sites we actually read are replaced).
+ */
+export async function refreshAthensMenus(venues: BeerVenue[] = beerRepo.venues().filter((v) => inGreece(v))): Promise<SourceStatus> {
+  try {
+    const r = await crawlVenueSites(venues, log('athens'), 8, 'EUR');
+    beerRepo.replaceWebsiteFor(r.readIds, r.prices, r.happyHours);
+    return { source: 'athens-menus', ok: true, stores: r.sitesWithInfo, products: r.prices.length + r.happyHours.length, finishedAt: at() };
+  } catch (e) {
+    return { source: 'athens-menus', ok: false, stores: 0, products: 0, error: (e as Error).message, finishedAt: at() };
+  }
 }

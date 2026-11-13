@@ -72,6 +72,13 @@ export const AREAS: Record<string, HomeArea> = {
 
 export const regionOf = (homeZip: string | undefined): Region => REGIONS[(homeZip && AREAS[homeZip]?.region) || 'us'];
 
+/** Nothing farther than this from your home area code is ever shown (keeps San Diego and Athens apart). */
+export const MAX_RESULT_MILES = 100;
+
+/** Which region a place is in, from its location (Greece = Europe; everything else is treated as U.S.). */
+export const regionAt = (p: { lat: number; lng: number }): Region =>
+  REGIONS[p.lat > 34.5 && p.lat < 42 && p.lng > 19 && p.lng < 30 ? 'europe' : 'us'];
+
 // ---- units & money, so both regions read naturally ----
 export const KM_PER_MI = 1.609344;
 const toUnits = (miles: number, units: Region['units']) => (units === 'km' ? miles * KM_PER_MI : miles);

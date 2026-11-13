@@ -134,3 +134,75 @@ export function htmlToText(html: string): string {
     .replace(/&#39;|&rsquo;|&#8217;/g, "'").replace(/&quot;|&ldquo;|&rdquo;/g, '"')
     .replace(/[ \t]+/g, ' ');
 }
+
+// ---------- Euro menus (Athens): "Mythos 500ml 4,50€", "€5 draft", "Μπύρα βαρέλι 0,5L 5 €" ----------
+
+// Beer words in English and Greek, plus brands you see on Athens menus. Matched as whole words in any alphabet.
+const EU_BEER = String.raw`(?:drafts?|draughts?|pints?|beers?|lagers?|pils(?:ner)?|ipas?|ales?|stouts?|weiss(?:bier)?|wheat|bottles?|cans?|on tap|`
+  + String.raw`μπ[υύ]ρ(?:α|ες|ας)|μπ[ιί]ρ(?:α|ες|ας)|βαρ[εέ]λ(?:ι|ια|ιού)|φιάλη|κουτάκι|`
+  + String.raw`mythos|μ[υύ]θος|fix|φιξ|alfa|[αά]λφα|vergina|βεργ[ιί]να|kaiser|amstel|heineken|nymfi|ν[υύ]μφη|septem|zeos|volkan|mamos|μ[αά]μος|`
+  + String.raw`kozel|pilsner urquell|stella(?: artois)?|corona|erdinger|paulaner|guinness|fischer|krombacher|leffe|hoegaarden|carlsberg|tuborg|peroni|estrella|kirin|`
+  + String.raw`noctua|marea|siris|chios|corfu|koryfo|κορυφ[ωώ]|craft)`;
+// Not beer, or not one beer, near the price.
+const EU_NOT_BEER = /(wine|κρασ[ιί]|cocktails?|κοκτ[εέ]ιλ|spirits?|ποτ[οό]\b|σφην|shot|coffee|καφ[εέ]|freddo|espresso|cappuccino|tea\b|τσ[αά]ι|juice|χυμ[οό]ς|soda|αναψυκτικ|water|νερ[οό]|food|burger|pizza|π[ιί]τσα|σαλ[αά]τα|salad|souvlaki|σουβλ|fries|πατ[αά]τες|pitcher|καν[αά]τα|bucket|κουβ[αά]|tower|πύργος|ginger beer|root beer|tonic|τζιν|gin\b|vodka|β[οό]ντκα|rum|ρούμι|whisk|ουίσκι|tequila|mezcal|aperol|spritz|mojito|margarita|sangria)/iu;
+const NUM = String.raw`(\d{1,2}(?:[.,]\d{1,2})?)`;
+const EURO_AFTER = String.raw`${NUM}\s?(?:€|eur(?:o|os|ώ)?\b|ευρ[ωώ])`;   // 4,50€ / 5 EUR / 5 ευρώ
+const EURO_BEFORE = String.raw`€\s?${NUM}`;                                  // €5
+const SIZE = String.raw`(?:\d{2,4}\s?ml|\d{1,2}\s?cl|[01][.,]\d{1,2}\s?(?:l|lt|λτ)\b|pint|μεγ[αά]λη|μικρ[ηή])`;
+const ABV = String.raw`(?:[\s–\-|]*\d{1,2}(?:[.,]\d)?\s?%\s?(?:vol|abv)?[\s–\-|]*)?`;
+
+const euNum = (s: string) => parseFloat(s.replace(',', '.'));
+function euSize(s: string): string | undefined {
+  const m = /(\d{2,4})\s?ml/i.exec(s) ?? null;
+  if (m) return `${m[1]}ml`;
+  const cl = /(\d{1,2})\s?cl/i.exec(s);
+  if (cl) return `${+cl[1] * 10}ml`;
+  const l = /([01][.,]\d{1,2})\s?(?:l|lt|λτ)\b/i.exec(s);
+  if (l) return `${Math.round(euNum(l[1]) * 1000)}ml`;
+  if (/pint/i.test(s)) return 'pint';
+  return undefined;
+}
+
+/** Euro beer prices in menu or happy-hour text (Greek or English). Strict: unclear lines are skipped, not guessed. */
+export function parseEuroPrices(text: string, happyHour: boolean): FoundPrice[] {
+  const out: FoundPrice[] = [];
+  const W = String.raw`[\p{L}\d][\p{L}\d'’&.\-]*`;
+  // "Mythos 500ml 4,50€", "Μπύρα βαρέλι 0,5L – 5 €", "Kaiser 500ml\n5.2% vol –\n4.00€"
+  const after = new RegExp(String.raw`(?<![\p{L}])((?:${W} ){0,3}${EU_BEER}(?![\p{L}])(?: (?!and |και |with |με )${W}){0,3}?)\s*(${SIZE})?${ABV}\s*(?:[:\-–|·]\s*)?(?:${EURO_AFTER}|${EURO_BEFORE})(?!\s?\/\s?(?:\d|€))`, 'giu');
+  // "€5 draft beers", "5€ μπύρα βαρέλι" (happy-hour style)
+  const before = new RegExp(String.raw`(?:${EURO_BEFORE}|${EURO_AFTER})\s+((?:${W} ){0,2}${EU_BEER}(?![\p{L}])(?: (?!and\b|και\b|with\b|με\b|or\b|ή\b)${W}){0,1})`, 'giu');
+  const push = (raw: string, item: string, sizeText: string, at: number, len: number) => {
+    const price = euNum(raw);
+    if (!(price >= 1.5 && price <= 15)) return;
+    const ctx = text.slice(Math.max(0, at - 20), at + len + 20);
+    if (EU_NOT_BEER.test(item) || EU_NOT_BEER.test(text.slice(at, at + len))) return;
+    if (/\d\s?(?:€|eur)\s?\/\s?\d|\d\s?\/\s?\d+\s?(?:€|eur)/i.test(ctx)) return;    // "4€ / 5€": which size is which? skip
+    if (/\b(off|έκπτωση|discount|\+)\s*$/i.test(text.slice(Math.max(0, at - 12), at))) return;
+    const clean = item.trim().replace(/\s+/g, ' ').replace(/[\s:\-–|·]+$/, '');
+    // Under a spirits/wine/cocktail heading ("whiskey ... Jameson IPA Edition 10€"), it isn't beer.
+    const before = text.slice(Math.max(0, at - 160), at);
+    const lastSpirit = before.search(/(whisk(?:e)?y|ουίσκι|gin|τζιν|vodka|β[οό]ντκα|rum|ρούμι|tequila|mezcal|wines?|κρασ|cocktails?|κοκτ[εέ]ιλ|spirits)(?![\p{L}])(?![\s\S]*(?:beers?|μπ[υύ]ρ|draft|βαρ[εέ]λ))/iu);
+    if (lastSpirit >= 0) return;
+    // "440ml Can" alone names no beer.
+    if (/^(?:\d{2,4}\s?ml\s*)?(?:cans?|bottles?|κουτ[αά]κι|φι[αά]λη)$/iu.test(clean)) return;
+    if (!clean || /^(cans?|bottles?|beers?|μπ[υύ]ρ(?:α|ες))$/iu.test(clean) && !happyHour) return; // bare "Beer 5€" on a menu says too little
+    const size = euSize(sizeText || item);
+    if (out.some((o) => o.price === price && o.item.toLowerCase() === clean.toLowerCase() && o.size === size)) return;
+    out.push({ item: cap(clean), price, size, happyHour, text: squish(text.slice(Math.max(0, at - 40), at + len + 40)) });
+  };
+  for (const m of text.matchAll(after)) push(m[3] ?? m[4], m[1], m[2] ?? '', m.index ?? 0, m[0].length);
+  if (happyHour) for (const m of text.matchAll(before)) push(m[1] ?? m[2], m[3], '', m.index ?? 0, m[0].length);
+  return out;
+}
+
+/** Happy-hour windows plus euro prices near them. */
+export function extractEuroHappyHour(pageText: string): { windows: FoundWindow[]; prices: FoundPrice[] } {
+  const { windows } = extractHappyHour(pageText);
+  const text = squish(pageText);
+  const prices: FoundPrice[] = [];
+  for (const m of text.matchAll(/happy\s*hour|χ[αά]πι\s*[αά]ουερ/giu)) {
+    const at = m.index ?? 0;
+    for (const p of parseEuroPrices(text.slice(at, at + 400), true)) if (!prices.some((x) => x.price === p.price && x.item === p.item)) prices.push(p);
+  }
+  return { windows, prices: prices.slice(0, 8) };
+}

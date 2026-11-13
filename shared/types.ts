@@ -192,7 +192,7 @@ export interface PricedItem {
 }
 
 export interface SourceStatus {
-  source: SourceId | 'osm' | 'bar-websites';
+  source: SourceId | 'osm' | 'bar-websites' | 'athens-menus';
   ok: boolean;
   stores: number;
   products: number;

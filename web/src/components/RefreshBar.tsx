@@ -11,7 +11,7 @@ function ago(iso?: string) {
   return h < 24 ? `${h}h ago` : new Date(iso).toLocaleDateString();
 }
 
-const SOURCE_NAMES: Record<string, string> = { osm: 'Places (OpenStreetMap)', 'bar-websites': 'Bar websites' };
+const SOURCE_NAMES: Record<string, string> = { osm: 'Places (OpenStreetMap)', 'bar-websites': 'Bar websites', 'athens-menus': 'Athens bar menus (€)' };
 
 /** Refresh button + "updated X ago" + per-source status (tap to see which sources failed). */
 export default function RefreshBar({ onRefreshed, statusFn = api.status, refreshFn = api.refresh, accent = 'weed' }: {

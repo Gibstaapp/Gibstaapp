@@ -15,7 +15,7 @@ import { CITY_TAXES, CA_EXCISE_RATE, DEFAULT_CITY_TAX } from './pricing/taxes.ts
 import { sendMorningDigest } from './notify.ts';
 import { morningJob, startScheduler } from './scheduler.ts';
 import { AREAS } from './zips.ts';
-import { regionOf } from '@gib/shared';
+import { regionAt, regionOf } from '@gib/shared';
 import { getPublicUrl, startTunnel } from './tunnel.ts';
 import './sources/register.ts';
 import { randomUUID } from 'node:crypto';
@@ -163,7 +163,7 @@ app.post('/api/beer/report', async (req, reply) => {
   const hhmm = /^\d{2}:\d{2}$/;
   const p: BeerPrice = {
     id: `user:${randomUUID()}`, venueId: b.venueId, item: b.item.trim().slice(0, 60), price: Math.round(price * 100) / 100,
-    ...(b.currency === 'EUR' ? { currency: 'EUR' as const } : {}),
+    ...(regionAt(beerRepo.venues().find((v) => v.id === b.venueId)!).currency === 'EUR' ? { currency: 'EUR' as const } : {}), // the place's currency, not the phone's
     size: b.size?.trim().slice(0, 20) || undefined,
     kind: (['regular', 'happy_hour', 'special'] as const).includes(b.kind) ? b.kind : 'regular',
     days: Array.isArray(b.days) ? b.days.filter((d) => Number.isInteger(d) && d >= 0 && d <= 6) : undefined,

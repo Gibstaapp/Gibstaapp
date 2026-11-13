@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { AREAS, ATHENS_POSTCODES, SD_ZIPS, distanceChoices, fmtDistance, fmtNear, regionOf } from '@gib/shared';
+import { AREAS, ATHENS_POSTCODES, MAX_RESULT_MILES, SD_ZIPS, distanceChoices, fmtDistance, fmtNear, regionAt, regionOf, type Product, type Store } from '@gib/shared';
+import { DEFAULT_PROFILE } from '../src/db.ts';
 import { openState } from '../src/hours.ts';
 import { ouncesOf, rankVenues } from '../src/beer/rank.ts';
 import { loadSeed } from '../src/beer/refresh.ts';
 import { dedupe } from '../src/beer/osm.ts';
-import { haversineMiles } from '../src/pricing/engine.ts';
+import { haversineMiles, rankItems } from '../src/pricing/engine.ts';
 
 describe('area codes', () => {
   it('San Diego ZIPs are under the U.S. tab, Athens postcodes under Europe', () => {
@@ -102,5 +103,38 @@ describe('Athens deals in beer-seed.json', () => {
     }
     expect(seed.venues.map((v) => v.name)).toEqual(expect.arrayContaining(['Berlin by 5 Drunkmen', 'Hard Rock Cafe Athens']));
     expect(seed.happyHours.map((h) => `${h.start}-${h.end}`)).toEqual(['16:00-18:00', '22:00-23:00']);
+  });
+});
+
+describe('San Diego and Athens stay apart', () => {
+  const plaka = AREAS['105 58'], uc = AREAS['92122'];
+  const bar = (id: string, lat: number, lng: number) => ({ id, name: id, kind: 'bar' as const, lat, lng, source: 'osm' as const });
+  const sdBar = bar('sd', 32.85, -117.2), athensBar = bar('ath', 37.976, 23.726), oceanside = bar('far-sd', 33.2, -117.38), lasVegas = bar('vegas', 36.17, -115.14);
+  it('beer: nothing more than 100 mi from the home area code', () => {
+    const all = [sdBar, athensBar, oceanside, lasVegas];
+    // Home in Athens, even if the search point is San Diego: only Athens bars, never San Diego ones.
+    expect(rankVenues({ lat: uc.lat, lng: uc.lng, home: plaka }, all, [], []).map((r) => r.venue.id)).toEqual(['ath']);
+    expect(rankVenues({ lat: plaka.lat, lng: plaka.lng, home: plaka }, all, [], []).map((r) => r.venue.id)).toEqual(['ath']);
+    // Home in San Diego: San Diego County yes, Las Vegas (~250 mi) and Athens no.
+    expect(rankVenues({ lat: uc.lat, lng: uc.lng, home: uc }, all, [], []).map((r) => r.venue.id).sort()).toEqual(['far-sd', 'sd']);
+    expect(MAX_RESULT_MILES).toBe(100);
+  });
+  it('weed: no store more than 100 mi from home, delivery included', () => {
+    const store = (id: string, lat: number, lng: number): Store => ({ id, name: id, address: '1 Main St', city: 'X', lat, lng, sources: [{ source: 'sample', externalId: id }],
+      pickup: true, ownSitePickup: null, taxIncluded: true, delivery: [{ via: 'store', fee: 0, minimum: 0 }] });
+    const product = (storeId: string): Product => ({ id: `${storeId}:p`, storeId, source: 'sample', name: 'Blue Dream 3.5g', category: 'flower', grams: 3.5, price: 30 });
+    const stores = new Map([['near', store('near', 32.86, -117.2)], ['vegas', store('vegas', 36.17, -115.14)]]);
+    const products = [product('near'), product('vegas')];
+    for (const mode of ['pickup', 'delivery'] as const) {
+      expect(rankItems(products, stores, [], new Map(), DEFAULT_PROFILE, { mode, maxMiles: 500 }).map((i) => i.store.id)).toEqual(['near']);
+    }
+  });
+  it('Athens prices are always euros; a dollar price on a Greek website is dropped', () => {
+    const p = (id: string, price: number, currency?: 'EUR') => ({ id, venueId: 'ath', item: 'Draft', price, ...(currency ? { currency } : {}), kind: 'regular' as const, source: 'website' as const, reportedAt: '2026-11-13' });
+    const [r] = rankVenues({ lat: plaka.lat, lng: plaka.lng, home: plaka }, [athensBar], [p('usd', 3), p('eur', 5, 'EUR')], []);
+    expect(r.prices.map((x) => x.id)).toEqual(['eur']);
+    expect(r.best).toMatchObject({ price: 5, currency: 'EUR' });
+    expect(regionAt(athensBar).currency).toBe('EUR');
+    expect(regionAt(sdBar).currency).toBe('USD');
   });
 });

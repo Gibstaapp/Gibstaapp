@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { CURRENCY_SYMBOL, distanceChoices, fmtDistance, type BeerPrice, type BeerSort, type BeerVenueKind, type OpenStatus, type RankedVenue, type UserProfile } from '@gib/shared';
+import { CURRENCY_SYMBOL, MAX_RESULT_MILES, regionAt, distanceChoices, fmtDistance, type BeerPrice, type BeerSort, type BeerVenueKind, type OpenStatus, type RankedVenue, type UserProfile } from '@gib/shared';
 import { snapTo, useRegion } from '../region.ts';
 import { MapContainer, TileLayer, CircleMarker, Popup } from 'react-leaflet';
 import { api, STATIC } from '../api.ts';
@@ -94,7 +94,13 @@ export default function BeerPage({ profile, top }: { profile: UserProfile; top: 
   const { fix, error: locError, retry } = useLocation(home);
   // Re-query only when we've moved a bit, not on every GPS jitter.
   const [queryAt, setQueryAt] = useState(home);
-  useEffect(() => { if (haversine(queryAt.lat, queryAt.lng, fix.lat, fix.lng) > 0.15) setQueryAt({ lat: fix.lat, lng: fix.lng }); }, [fix, queryAt]);
+  // Search around where you are, unless that's more than 100 mi from your home area code: then around home
+  // (results never come from more than MAX_RESULT_MILES away from it, so San Diego and Athens stay apart).
+  const awayFromHome = fix.source === 'gps' && haversine(home.lat, home.lng, fix.lat, fix.lng) > MAX_RESULT_MILES;
+  useEffect(() => {
+    const want = awayFromHome ? home : { lat: fix.lat, lng: fix.lng };
+    if (haversine(queryAt.lat, queryAt.lng, want.lat, want.lng) > 0.15) setQueryAt(want);
+  }, [fix, queryAt, home, awayFromHome]);
 
   useEffect(() => {
     pref.set('gib.beer.kind', kind); pref.set('gib.beer.sort', sort); pref.set('gib.beer.view', view);
@@ -103,17 +109,17 @@ export default function BeerPage({ profile, top }: { profile: UserProfile; top: 
 
   const load = useCallback(() => {
     setError(null);
-    api.beer.venues({ lat: queryAt.lat, lng: queryAt.lng, kind, sort, openNow, maxMiles, limit: 200 })
+    api.beer.venues({ lat: queryAt.lat, lng: queryAt.lng, home, kind, sort, openNow, maxMiles, limit: 200 })
       .then((r) => { setList(r.venues); setLoadingNote(r.loading); setIdx(0); })
       .catch((e) => setError(String(e.message ?? e)));
-  }, [queryAt, kind, sort, openNow, maxMiles]);
+  }, [queryAt, home, kind, sort, openNow, maxMiles]);
   useEffect(load, [load]);
   // Keep the detail sheet in sync after a report.
   const refreshDetail = useCallback(async (id: string) => {
-    const r = await api.beer.venues({ lat: queryAt.lat, lng: queryAt.lng, kind, sort, openNow: false, maxMiles: 60, limit: 400 });
+    const r = await api.beer.venues({ lat: queryAt.lat, lng: queryAt.lng, home, kind, sort, openNow: false, maxMiles: 60, limit: 400 });
     setList((cur) => cur?.map((x) => r.venues.find((y) => y.venue.id === x.venue.id) ?? x) ?? null);
     setDetail(r.venues.find((x) => x.venue.id === id) ?? null);
-  }, [queryAt, kind, sort]);
+  }, [queryAt, home, kind, sort]);
 
   const pointAt = (venueId: string) => {
     const i = list?.findIndex((x) => x.venue.id === venueId) ?? -1;
@@ -177,7 +183,8 @@ export default function BeerPage({ profile, top }: { profile: UserProfile; top: 
 
       {list && list.length > 0 && view === 'list' && (
         <div className="p-3 space-y-3">
-          <p className="text-xs text-zinc-500 px-1">{list.length} places{openNow ? ' open now' : ''} · {priced} with a price right now · from {fix.source === 'gps' ? 'your location' : `${region.codeName} ${profile.homeZip}`}</p>
+          <p className="text-xs text-zinc-500 px-1">{list.length} places{openNow ? ' open now' : ''} · {priced} with a price right now · from {fix.source === 'gps' && !awayFromHome ? 'your location' : `${region.codeName} ${profile.homeZip}`}</p>
+          {awayFromHome && <p className="text-xs text-amber-300/80 px-1">You're more than {fmtDistance(MAX_RESULT_MILES, region.units, 0)} from your home {region.codeName}, so these are places near it. Change it in Settings.</p>}
           <ul className="space-y-3">
             {list.map((r, i) => (<Fragment key={r.venue.id}>
               {openNow && r.isOpen === null && (i === 0 || list[i - 1].isOpen !== null) && (
@@ -291,15 +298,16 @@ function VenueSheet({ r, onClose, onChanged, onCompass }: { r: RankedVenue; onCl
           </section>
         )}
 
-        {reporting ? <ReportForm venueId={v.id} onDone={() => { setReporting(false); onChanged(); }} onCancel={() => setReporting(false)} />
+        {reporting ? <ReportForm venue={v} onDone={() => { setReporting(false); onChanged(); }} onCancel={() => setReporting(false)} />
           : <button onClick={() => setReporting(true)} className="w-full rounded-lg border border-amber-500/60 text-amber-300 py-2 text-sm font-semibold">+ Report a price</button>}
       </div>
     </div>
   );
 }
 
-function ReportForm({ venueId, onDone, onCancel }: { venueId: string; onDone: () => void; onCancel: () => void }) {
-  const { currency } = useRegion();
+function ReportForm({ venue, onDone, onCancel }: { venue: { id: string; lat: number; lng: number }; onDone: () => void; onCancel: () => void }) {
+  const venueId = venue.id;
+  const { currency } = regionAt(venue); // the place's currency (Athens = €)
   const [item, setItem] = useState('');
   const [price, setPrice] = useState('');
   const [size, setSize] = useState('pint');
