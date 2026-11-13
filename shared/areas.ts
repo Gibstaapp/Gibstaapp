@@ -1,7 +1,9 @@
 // ---- Where Gibstaapp works: regions (U.S. / Europe) and the area codes people pick as "home". ----
 import { ATHENS_POSTCODES } from './athens-postcodes.ts';
+import { NYC_ZIPS } from './nyc-zips.ts';
 
-export type RegionId = 'us' | 'europe';
+/** 'us' is San Diego (the original region; the id stays for saved data). */
+export type RegionId = 'us' | 'nyc' | 'europe';
 
 export interface Region {
   id: RegionId;
@@ -12,11 +14,16 @@ export interface Region {
   units: 'mi' | 'km';
   weedLegal: boolean;        // recreational cannabis legal (so the Weed side has shops to show)
   timeZone: string;
+  /** Center for the daily refresh and how far it reaches (miles). */
+  center: { lat: number; lng: number; miles: number };
+  /** U.S. state whose cannabis taxes apply ('CA' San Diego, 'NY' New York). */
+  taxState?: 'CA' | 'NY';
 }
 
 export const REGIONS: Record<RegionId, Region> = {
-  us: { id: 'us', tab: '🇺🇸 U.S.', city: 'San Diego', codeName: 'ZIP', currency: 'USD', units: 'mi', weedLegal: true, timeZone: 'America/Los_Angeles' },
-  europe: { id: 'europe', tab: '🇪🇺 Europe', city: 'Athens', codeName: 'postcode', currency: 'EUR', units: 'km', weedLegal: false, timeZone: 'Europe/Athens' },
+  us: { id: 'us', tab: '🌴 San Diego', city: 'San Diego', codeName: 'ZIP', currency: 'USD', units: 'mi', weedLegal: true, timeZone: 'America/Los_Angeles', center: { lat: 32.8566, lng: -117.2091, miles: 30 }, taxState: 'CA' },
+  nyc: { id: 'nyc', tab: '🗽 New York', city: 'New York', codeName: 'ZIP', currency: 'USD', units: 'mi', weedLegal: true, timeZone: 'America/New_York', center: { lat: 40.7306, lng: -73.9352, miles: 20 }, taxState: 'NY' },
+  europe: { id: 'europe', tab: '🇪🇺 Europe', city: 'Athens', codeName: 'postcode', currency: 'EUR', units: 'km', weedLegal: false, timeZone: 'Europe/Athens', center: { lat: 37.9838, lng: 23.7275, miles: 25 } },
 };
 
 export interface HomeArea { lat: number; lng: number; area: string; city: string; region: RegionId }
@@ -64,23 +71,31 @@ export const SD_ZIPS: Record<string, { lat: number; lng: number; area: string }>
   '92025': { lat: 33.1100, lng: -117.0700, area: 'Escondido' },
 };
 
-/** Every area code you can pick, with its region. U.S. ZIPs are 5 digits ("92122"); Athens postcodes are "105 58". */
+/** Tabs in the area-code picker, in order. */
+export const REGION_ORDER: RegionId[] = ['us', 'nyc', 'europe'];
+
+/** Every area code you can pick, with its region. U.S. ZIPs are 5 digits ("92122", "10003"); Athens postcodes are "105 58". */
 export const AREAS: Record<string, HomeArea> = {
   ...Object.fromEntries(Object.entries(SD_ZIPS).map(([k, v]) => [k, { ...v, city: 'San Diego', region: 'us' as const }])),
+  ...Object.fromEntries(Object.entries(NYC_ZIPS).map(([k, v]) => [k, { ...v, region: 'nyc' as const }])),
   ...Object.fromEntries(Object.entries(ATHENS_POSTCODES).map(([k, v]) => [k, { ...v, region: 'europe' as const }])),
 };
 
 export const regionOf = (homeZip: string | undefined): Region => REGIONS[(homeZip && AREAS[homeZip]?.region) || 'us'];
 
 /** Each city's daily beer refresh owns these status lines (San Diego in dollars, Athens in euros). */
-export const BEER_STATUS_SOURCES: Record<RegionId, string[]> = { us: ['osm', 'bar-websites'], europe: ['athens-places', 'athens-menus'] };
+export const BEER_STATUS_SOURCES: Record<RegionId, string[]> = { us: ['osm', 'bar-websites'], nyc: ['nyc-places', 'nyc-bar-websites'], europe: ['athens-places', 'athens-menus'] };
+
+/** Each weed city has its own data file on the website, so a phone only downloads its own city. */
+export const WEED_FILES: Partial<Record<RegionId, string>> = { us: 'weed.json', nyc: 'weed-nyc.json' };
 
 /** Nothing farther than this from your home area code is ever shown (keeps San Diego and Athens apart). */
 export const MAX_RESULT_MILES = 100;
 
-/** Which region a place is in, from its location (Greece = Europe; everything else is treated as U.S.). */
+/** Which region a place is in, from its location: Greece = Europe (Athens), the New York area = New York, else San Diego. */
 export const regionAt = (p: { lat: number; lng: number }): Region =>
-  REGIONS[p.lat > 34.5 && p.lat < 42 && p.lng > 19 && p.lng < 30 ? 'europe' : 'us'];
+  REGIONS[p.lat > 34.5 && p.lat < 42 && p.lng > 19 && p.lng < 30 ? 'europe'
+    : p.lat > 40.3 && p.lat < 41.3 && p.lng > -74.6 && p.lng < -73.2 ? 'nyc' : 'us'];
 
 // ---- units & money, so both regions read naturally ----
 export const KM_PER_MI = 1.609344;

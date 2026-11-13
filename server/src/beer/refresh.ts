@@ -3,7 +3,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { BeerPrice, BeerVenue, HappyHour, RefreshStatus, SourceStatus } from '@gib/shared';
 import { beerRepo, repo, DEFAULT_PROFILE, type BeerArea } from '../db.ts';
-import { BEER_STATUS_SOURCES, regionAt, type RegionId } from '@gib/shared';
+import { BEER_STATUS_SOURCES, REGIONS, regionAt, type RegionId } from '@gib/shared';
 import { haversineMiles } from '../pricing/engine.ts';
 import { fetchOsmVenues } from './osm.ts';
 import { crawlVenueSites } from './websites.ts';
@@ -20,7 +20,10 @@ const OSM_MAX_AGE_MS = 6 * 86400_000;      // places don't change often; Overpas
 const AREA_KEEP_MS = 30 * 86400_000;       // stop refreshing areas nobody has looked at in a month
 const HOME_MILES = 25;
 /** Cities we launched in, refreshed every day next to home (so they load instantly on the website). */
-export const LAUNCH_AREAS = [{ name: 'Athens', lat: 37.9838, lng: 23.7275, miles: 25 }];
+export const LAUNCH_AREAS = [
+  { name: 'Athens', lat: 37.9838, lng: 23.7275, miles: 25 },
+  { name: 'New York', lat: REGIONS.nyc.center.lat, lng: REGIONS.nyc.center.lng, miles: REGIONS.nyc.center.miles },
+];
 
 // Letters in any alphabet, so Greek names match too.
 const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[^\p{L}\p{N}]/gu, '');
@@ -128,16 +131,18 @@ async function crawlArea(area: BeerArea) {
 export type BeerRegionId = RegionId;
 /** Status lines each refresh owns (shown in the app's refresh details). */
 export const BEER_SOURCES = BEER_STATUS_SOURCES as Record<RegionId, SourceStatus['source'][]>;
-export const BEER_REFRESH_TIME_ZONE: Record<RegionId, string> = { us: 'America/Los_Angeles', europe: 'Europe/Athens' };
+export const BEER_REFRESH_TIME_ZONE = Object.fromEntries(Object.values(REGIONS).map((r) => [r.id, r.timeZone])) as Record<RegionId, string>;
 
 const running = new Map<RegionId, Promise<SourceStatus[]>>();
 export const isBeerRefreshing = () => running.size > 0 || inflight.size > 0;
 
 export async function refreshBeer(opts: { forceOsm?: boolean; region?: RegionId } = {}): Promise<SourceStatus[]> {
   if (opts.region) return refreshBeerRegion(opts.region, !!opts.forceOsm);
-  const us = await refreshBeerRegion('us', !!opts.forceOsm).catch((e) => { console.error('[beer us]', e); return [] as SourceStatus[]; });
-  const eu = await refreshBeerRegion('europe', !!opts.forceOsm).catch((e) => { console.error('[beer europe]', e); return [] as SourceStatus[]; });
-  return [...us, ...eu];
+  const all: SourceStatus[] = [];
+  for (const r of ['us', 'nyc', 'europe'] as const) {
+    all.push(...await refreshBeerRegion(r, !!opts.forceOsm).catch((e) => { console.error(`[beer ${r}]`, e); return [] as SourceStatus[]; }));
+  }
+  return all;
 }
 
 /** This refresh's status lines replace only its own; the other city's stay exactly as they were. */
@@ -154,7 +159,7 @@ function refreshBeerRegion(region: RegionId, forceOsm: boolean): Promise<SourceS
   const job = (async () => {
     saveStatus(region, null);
     const [placesSrc, sitesSrc] = BEER_SOURCES[region];
-    const tag = region === 'europe' ? 'athens' : 'osm';
+    const tag = region === 'europe' ? 'athens' : region === 'nyc' ? 'nyc' : 'osm';
     const statuses: SourceStatus[] = [];
     const mine = (a: { lat: number; lng: number }) => regionAt(a).id === region;
 
@@ -170,7 +175,7 @@ function refreshBeerRegion(region: RegionId, forceOsm: boolean): Promise<SourceS
       const p = repo.profile();
       keep(mine(p) ? { lat: p.lat, lng: p.lng, miles: HOME_MILES } : { lat: DEFAULT_PROFILE.lat, lng: DEFAULT_PROFILE.lng, miles: HOME_MILES });
     } else {
-      for (const c of LAUNCH_AREAS) keep(c);
+      for (const c of LAUNCH_AREAS) if (mine(c)) keep(c);
     }
 
     // 1. Places (OpenStreetMap), weekly per area.
@@ -189,10 +194,10 @@ function refreshBeerRegion(region: RegionId, forceOsm: boolean): Promise<SourceS
     // 2. Hand-entered places/prices (both cities live in one file; applying it is cheap and idempotent).
     applySeed();
 
-    // 3. The bars' own websites: dollars in San Diego, euros (Greek or English) in Athens.
+    // 3. The bars' own websites (and their PDF menus): dollars in San Diego and New York, euros in Athens.
     statuses.push(region === 'europe'
       ? await refreshAthensMenus(inUse)
-      : await readSites(inUse, 'USD', sitesSrc, log('web')));
+      : await readSites(inUse, 'USD', sitesSrc, log(region === 'nyc' ? 'nyc-web' : 'web')));
     const done = beerRepo.areas();
     for (const a of done) if (mine(a)) a.crawledAt = at();
     beerRepo.setAreas(done);

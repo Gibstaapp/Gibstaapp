@@ -3,8 +3,11 @@
  *
  *   GIB_DB=/tmp/snap.db PREV_URL=https://<github-owner>.github.io/Gibstaapp npx tsx src/export-static.ts ../web/dist/data
  *
- * REFRESH=athens: only the Athens beer refresh (euros); weed and San Diego beer keep the data they have.
- * REFRESH=sandiego: weed + San Diego beer (dollars) only; Athens keeps the data it has.
+ * Each city is its own refresh; the others keep the data they have:
+ *   REFRESH=sandiego  San Diego weed + beer (dollars)
+ *   REFRESH=newyork   New York weed + beer (dollars)
+ *   REFRESH=athens    Athens beer (euros)
+ *   (unset)           all three, one city after another
  * SKIP_REFRESH=1: no refreshes at all, just merge what's there (deploys after a code change).
  *
  * 1. Loads the previous snapshot from the live site, so a source that fails today keeps yesterday's data.
@@ -15,7 +18,7 @@
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import type { BeerPrice, BeerVenue, Deal, HappyHour, Product, RefreshStatus, Store } from '@gib/shared';
+import { REGIONS, WEED_FILES, regionAt, type RegionId, type BeerPrice, type BeerVenue, type Deal, type HappyHour, type Product, type RefreshStatus, type Store } from '@gib/shared';
 import { beerRepo, repo, DEFAULT_PROFILE } from './db.ts';
 import { config } from './config.ts';
 import { refreshAll } from './refresh.ts';
@@ -25,7 +28,8 @@ import { mergeResults } from './normalize.ts';
 import { repairPackWeight } from './sanitize.ts';
 import './sources/register.ts';
 
-export interface WeedSnapshot { stores: Store[]; products: Product[]; deals: Deal[]; status: RefreshStatus }
+import { mergeWeed, okAt, type WeedSnapshot } from './merge-weed.ts';
+export type { WeedSnapshot };
 export interface BeerSnapshot { venues: BeerVenue[]; prices: BeerPrice[]; happyHours: HappyHour[]; status: RefreshStatus; area: { lat: number; lng: number; miles: number }; areas?: { lat: number; lng: number; miles: number }[] }
 
 const outDir = resolve(process.argv[2] ?? 'static-data');
@@ -34,37 +38,14 @@ const KEEP_PER_STORE_CATEGORY = 60;
 async function fetchSnap(dir: string | undefined): Promise<{ w: WeedSnapshot | null; b: BeerSnapshot | null }> {
   if (!dir) return { w: null, b: null };
   const get = <T>(f: string) => fetch(`${dir.replace(/\/+$/, '')}/${f}`, { cache: 'no-store' }).then((r) => (r.ok ? r.json() as Promise<T> : null)).catch(() => null);
-  const [w, b] = await Promise.all([get<WeedSnapshot>('weed.json'), get<BeerSnapshot>('beer.json')]);
+  // One weed file per city (weed.json = San Diego, weed-nyc.json = New York): read them all as one snapshot.
+  const [b, ...ws] = await Promise.all([get<BeerSnapshot>('beer.json'), ...Object.values(WEED_FILES).map((f) => get<WeedSnapshot>(f!))]);
+  const got = ws.filter((x): x is WeedSnapshot => !!x);
+  const w = got.length ? {
+    stores: got.flatMap((x) => x.stores), products: got.flatMap((x) => x.products), deals: got.flatMap((x) => x.deals),
+    status: { running: false, lastRefreshAt: got.map((x) => x.status.lastRefreshAt ?? '').sort().pop(), sources: got.flatMap((x) => x.status.sources) },
+  } : null;
   return { w, b };
-}
-
-const okAt = (st: RefreshStatus | undefined, source: string) => {
-  const s = st?.sources.find((x) => x.source === source && x.ok && (x.products > 0 || x.stores > 0));
-  return s ? new Date(s.finishedAt).getTime() : -1;
-};
-
-/** Per source, keep whichever snapshot got it most recently. */
-export function mergeWeed(snaps: WeedSnapshot[]): WeedSnapshot | null {
-  if (!snaps.length) return null;
-  const sources = new Set(snaps.flatMap((s) => [...s.status.sources.map((x) => x.source), ...s.products.map((p) => p.source)]));
-  const products: Product[] = [], deals: Deal[] = [], statuses: RefreshStatus['sources'] = [];
-  const storeById = new Map<string, Store>();
-  for (const src of sources) {
-    const best = [...snaps].sort((a, b) => okAt(b.status, src) - okAt(a.status, src))[0];
-    products.push(...best.products.filter((p) => p.source === src));
-    deals.push(...best.deals.filter((d) => d.source === src));
-    // A store can come from several snapshots (merged across sources): keep hours from whichever one has them.
-    for (const s of best.stores) if (s.sources.some((x) => x.source === src)) storeById.set(s.id, { ...s, hours: s.hours ?? storeById.get(s.id)?.hours });
-    const st = best.status.sources.find((x) => x.source === src);
-    if (st) statuses.push(st);
-  }
-  // The same shop can arrive under two ids (e.g. "dutchie:…" from the PC and "weedmaps:…" from GitHub): fold them together.
-  const merged = mergeResults([{ stores: [...storeById.values()], products: products.map(repairPackWeight), deals }]);
-  const used = new Set(merged.products.map((p) => p.storeId));
-  return {
-    stores: merged.stores.filter((s) => used.has(s.id)), products: merged.products, deals: merged.deals,
-    status: { running: false, lastRefreshAt: snaps.map((s) => s.status.lastRefreshAt ?? '').sort().pop(), sources: statuses },
-  };
 }
 
 /**
@@ -85,11 +66,14 @@ async function loadPrevious() {
   }
 }
 
-function trimProducts(stores: Store[], products: Product[], deals: Deal[]): Product[] {
+/** Keep the cheapest products per store and category, ranked as someone in that city sees them. */
+function trimProducts(stores: Store[], products: Product[], deals: Deal[], region: RegionId): Product[] {
   const storeMap = new Map(stores.map((s) => [s.id, s]));
   const keep = new Set<string>();
+  const c = REGIONS[region].center;
+  const viewer = region === 'us' ? DEFAULT_PROFILE : { ...DEFAULT_PROFILE, lat: c.lat, lng: c.lng, radiusMiles: c.miles };
   for (const mode of ['pickup', 'delivery'] as const) {
-    const ranked = rankItems(products, storeMap, deals, new Map(), DEFAULT_PROFILE, { mode });
+    const ranked = rankItems(products, storeMap, deals, new Map(), viewer, { mode });
     const count = new Map<string, number>();
     for (const it of ranked) {
       const key = `${it.store.id}|${it.product.category}`;
@@ -109,35 +93,45 @@ applySeed();
 const weedBefore = repo.refreshStatus(), beerBefore = beerRepo.status();
 console.log('[export] sources:', Object.entries(config.sources).filter(([, on]) => on).map(([k]) => k).join(', '));
 // SKIP_REFRESH=1: just export what's in the database (for testing).
-const athensOnly = process.env.REFRESH === 'athens';
-const sanDiegoOnly = process.env.REFRESH === 'sandiego';
-const [weedRun] = process.env.SKIP_REFRESH || athensOnly ? [repo.refreshStatus()] : await Promise.all([
-  refreshAll(),
-  // San Diego ($) and Athens (€) are separate refreshes; one failing doesn't stop the other.
-  refreshBeer({ forceOsm: true, ...(sanDiegoOnly ? { region: 'us' as const } : {}) }).catch((e) => console.error('[export] beer', e)),
-]);
-if (athensOnly && !process.env.SKIP_REFRESH) {
-  console.log('[export] Athens-only beer refresh');
-  await refreshBeer({ region: 'europe', forceOsm: true }).catch((e) => console.error('[export] athens', e));
+const only = ({ sandiego: 'us', newyork: 'nyc', athens: 'europe' } as const)[process.env.REFRESH ?? ''];
+if (process.env.SKIP_REFRESH) {
+  // just merge
+} else if (only) {
+  console.log(`[export] ${process.env.REFRESH} only`);
+  // Weed (San Diego / New York) and beer for that city run side by side; one failing doesn't stop the other.
+  await Promise.all([
+    only === 'europe' ? null : refreshAll({ region: only }).catch((e) => console.error('[export] weed', e)),
+    refreshBeer({ region: only, forceOsm: true }).catch((e) => console.error('[export] beer', e)),
+  ]);
+} else {
+  await Promise.all([
+    refreshAll().catch((e) => console.error('[export] weed', e)),
+    refreshBeer({ forceOsm: true }).catch((e) => console.error('[export] beer', e)),
+  ]);
 }
+const weedRun = repo.refreshStatus();
 
 // A source that failed today is still shown with its last good data: report that, not the failure.
 const keepGood = (now: RefreshStatus, before: RefreshStatus): RefreshStatus => ({
   ...now,
-  sources: now.sources.map((x) => (x.ok ? x : before.sources.find((b) => b.source === x.source && b.ok) ?? x)),
+  sources: now.sources.map((x) => (x.ok ? x : before.sources.find((b) => b.source === x.source && (b.region ?? 'us') === (x.region ?? 'us') && b.ok) ?? x)),
 });
 const weedStatus = keepGood(weedRun, weedBefore);
 beerRepo.setStatus(keepGood(beerRepo.status(), beerBefore));
 
-const stores = repo.stores(), deals = repo.deals();
-const products = trimProducts(stores, repo.products(), deals);
-const usedStores = new Set(products.map((p) => p.storeId));
-const weed: WeedSnapshot = {
-  stores: stores.filter((s) => usedStores.has(s.id)),
-  products,
-  deals: deals.filter((d) => usedStores.has(d.storeId)),
-  status: weedStatus,
-};
+// One weed file per city, each trimmed as someone in that city sees it.
+const allStores = repo.stores(), allProducts = repo.products(), allDeals = repo.deals();
+const weedFiles = Object.entries(WEED_FILES).map(([region, file]) => {
+  const ids = new Set(allStores.filter((s) => regionAt(s).id === region).map((s) => s.id));
+  const stores = allStores.filter((s) => ids.has(s.id)), deals = allDeals.filter((d) => ids.has(d.storeId));
+  const products = trimProducts(stores, allProducts.filter((p) => ids.has(p.storeId)), deals, region as RegionId);
+  const used = new Set(products.map((p) => p.storeId));
+  const snap: WeedSnapshot = {
+    stores: stores.filter((s) => used.has(s.id)), products, deals: deals.filter((d) => used.has(d.storeId)),
+    status: { ...weedStatus, sources: weedStatus.sources.filter((s) => (s.region ?? 'us') === region) },
+  };
+  return { file: file!, snap };
+});
 const home = DEFAULT_PROFILE;
 const beer: BeerSnapshot = {
   venues: beerRepo.venues(),
@@ -150,8 +144,8 @@ const beer: BeerSnapshot = {
 };
 
 mkdirSync(outDir, { recursive: true });
-writeFileSync(resolve(outDir, 'weed.json'), JSON.stringify(weed));
+for (const { file, snap } of weedFiles) writeFileSync(resolve(outDir, file), JSON.stringify(snap));
 writeFileSync(resolve(outDir, 'beer.json'), JSON.stringify(beer));
 writeFileSync(resolve(outDir, 'meta.json'), JSON.stringify({ builtAt: new Date().toISOString(), weed: weedStatus, beer: beer.status }));
-console.log(`[export] wrote ${outDir}: ${weed.stores.length} stores, ${weed.products.length} products, ${beer.venues.length} beer places, ${beer.prices.length} beer prices`);
+console.log(`[export] wrote ${outDir}: ${weedFiles.map(({ file, snap }) => `${file} ${snap.stores.length} stores / ${snap.products.length} products`).join(', ')}, ${beer.venues.length} beer places, ${beer.prices.length} beer prices`);
 process.exit(0);

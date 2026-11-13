@@ -60,6 +60,7 @@ const TEMPLATES: Template[] = [
 
 export const sampleAdapter: SourceAdapter = {
   id: 'sample',
+  states: ['CA'], // fake San Diego stores
   enabled: () => config.sources.sample,
   async fetchAll(): Promise<SourceResult> {
     const today = new Date();

@@ -5,6 +5,8 @@ export interface SearchArea {
   lng: number;
   radiusMiles: number;
   zip: string;
+  /** Which state's rules apply (Dutchie tax state, which sources serve it). */
+  state: 'CA' | 'NY';
 }
 
 export interface SourceResult {
@@ -17,5 +19,7 @@ export interface SourceResult {
 export interface SourceAdapter {
   id: SourceId;
   enabled: () => boolean;
+  /** States this source covers; missing = any. (Eaze delivers in California only.) */
+  states?: ('CA' | 'NY')[];
   fetchAll(area: SearchArea, log: (msg: string) => void): Promise<SourceResult>;
 }

@@ -44,14 +44,28 @@ export function cityTax(city: string): CityTax {
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
 /**
+ * New York adult-use cannabis, checked Nov 2026:
+ *  - 9% state tax on the price charged to the retail customer (N.Y. Tax Law § 493),
+ *  - 4% local excise tax on the product's price (cannabis.ny.gov/localities; NYC allows dispensaries),
+ *  - no regular sales tax on adult-use cannabis (Tax Law § 1115(a)(3-b)).
+ * Shown as excise (state 9%) + local (4%), sales 0.
+ */
+export const NY_STATE_RATE = 0.09;
+export const NY_LOCAL_RATE = 0.04;
+
+/**
  * Taxes on a single purchase.
  * @param price        price after discounts
  * @param deliveryFee  delivery fee for this order (part of the taxable base in CA)
  * @param taxIncluded  true when the listed price already includes taxes
  */
-export function computeTax(price: number, city: string, deliveryFee = 0, taxIncluded: boolean | null = null): TaxBreakdown {
+export function computeTax(price: number, city: string, deliveryFee = 0, taxIncluded: boolean | null = null, state: 'CA' | 'NY' = 'CA'): TaxBreakdown {
   if (taxIncluded) {
     return { local: 0, excise: 0, sales: 0, total: 0, estimated: false, included: true };
+  }
+  if (state === 'NY') {
+    const excise = NY_STATE_RATE * price, local = NY_LOCAL_RATE * price;
+    return { local: round2(local), excise: round2(excise), sales: 0, total: round2(local + excise), estimated: true, included: false };
   }
   const t = cityTax(city);
   const local = t.localCannabisRate * price;

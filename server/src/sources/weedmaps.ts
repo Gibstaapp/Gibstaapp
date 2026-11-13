@@ -23,6 +23,8 @@ import { weeklyHoursToOsm } from '../hours.ts';
 /** How many menus to fetch (closest first). Storefronts + delivery services. */
 export const MAX_STOREFRONT_MENUS = 20;
 export const MAX_DELIVERY_MENUS = 8;
+/** Extra detail pages fetched just for opening hours (storefronts whose menu we don't read). */
+export const MAX_HOURS_DETAILS = 60;
 const PAGE_SIZE = 150; // API maximum
 /**
  * Menus are fetched per category group (Weedmaps' global category UUIDs; gear/wellness skipped), sorted by price.
@@ -657,7 +659,8 @@ export const weedmapsAdapter: SourceAdapter = {
       });
 
       // Storefronts whose menu we don't read still need their detail page for opening hours (and website / tax notes).
-      await runPool(storefronts.filter((l) => !details.has(l.slug)), CONCURRENCY, async (l) => {
+      // Capped at the nearest MAX_HOURS_DETAILS: New York has ~280 storefronts, and Dutchie/Jane give their own stores' hours.
+      await runPool(storefronts.filter((l) => !details.has(l.slug)).slice(0, MAX_HOURS_DETAILS), CONCURRENCY, async (l) => {
         try {
           const det = await getJson(page, `${API}/discovery/v1/listings/${listingPath(l)}/${l.slug}`);
           if (det?.data?.listing) details.set(l.slug, det.data.listing);

@@ -354,6 +354,7 @@ async function viaUi(page: Page, area: SearchArea, log: (m: string) => void): Pr
 
 export const eazeAdapter: SourceAdapter = {
   id: 'eaze',
+  states: ['CA'],
   enabled: () => config.sources.eaze,
   async fetchAll(area, log): Promise<SourceResult> {
     return withContext(async (ctx) => {

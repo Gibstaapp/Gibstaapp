@@ -13,6 +13,7 @@
     "athens": "tsx src/cli-athens.ts",
     "beer:athens": "tsx src/cli-beer.ts --region europe",
     "beer:sandiego": "tsx src/cli-beer.ts --region us",
+    "beer:newyork": "tsx src/cli-beer.ts --region nyc",
     "publish-data": "tsx src/publish.ts"
   },
   "dependencies": {

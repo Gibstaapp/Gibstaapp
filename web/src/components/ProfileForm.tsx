@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { AREAS, KM_PER_MI, REGIONS, regionOf, type HomeArea, type RegionId, type UserProfile } from '@gib/shared';
+import { AREAS, KM_PER_MI, REGIONS, REGION_ORDER, regionOf, type HomeArea, type RegionId, type UserProfile } from '@gib/shared';
 import { api } from '../api.ts';
 
 export function Toggle({ label, hint, checked, onChange }: { label: string; hint?: string; checked: boolean; onChange: (v: boolean) => void }) {
@@ -27,13 +27,14 @@ export default function ProfileForm({ value, onChange }: { value: UserProfile; o
   const [tab, setTab] = useState<RegionId>(() => regionOf(value.homeZip).id);
   const region = REGIONS[tab];
 
-  // Codes in this tab, grouped by city / municipality (San Diego County; Athens, Piraeus, Glyfada…).
+  // Codes in this tab, grouped: San Diego County; New York by borough; Athens by municipality.
   const groups = new Map<string, [string, HomeArea][]>();
   for (const [code, a] of Object.entries(areas).filter(([, a]) => (a.region ?? 'us') === tab).sort(([x], [y]) => x.localeCompare(y))) {
     const g = tab === 'us' ? 'San Diego County' : a.city;
     (groups.get(g) ?? groups.set(g, []).get(g)!).push([code, a]);
   }
-  const groupNames = [...groups.keys()].sort((a, b) => (a === 'Athens' ? -1 : b === 'Athens' ? 1 : a.localeCompare(b)));
+  const FIRST = ['Athens', 'Manhattan'];
+  const groupNames = [...groups.keys()].sort((a, b) => (FIRST.includes(a) ? -1 : FIRST.includes(b) ? 1 : a.localeCompare(b)));
   const inTab = (areas[value.homeZip]?.region ?? 'us') === tab;
   const pickTab = (t: RegionId) => {
     setTab(t);
@@ -43,18 +44,18 @@ export default function ProfileForm({ value, onChange }: { value: UserProfile; o
       if (first) onChange({ ...value, homeZip: first[0], lat: first[1].lat, lng: first[1].lng });
     }
   };
-  const radius = (REGIONS[tab].units === 'km' ? RADIUS_KM.map((k) => [k / KM_PER_MI, `${k} km`] as const) : RADIUS_MI.map((m) => [m, `${m} miles${m === 30 ? ' (all of SD)' : ''}`] as const));
+  const radius = (REGIONS[tab].units === 'km' ? RADIUS_KM.map((k) => [k / KM_PER_MI, `${k} km`] as const) : RADIUS_MI.map((m) => [m, `${m} miles${tab === 'us' && m === 30 ? ' (all of SD)' : tab === 'nyc' && m === 20 ? ' (all of NYC)' : ''}`] as const));
   const radiusValue = radius.reduce((best, [m]) => (Math.abs(m - value.radiusMiles) < Math.abs(best - value.radiusMiles) ? m : best), radius[0][0]);
 
   return (
     <div>
       <div className="py-3 border-b border-zinc-800">
-        <div className="flex items-center justify-between gap-2 mb-2 text-sm">
-          <span className="text-zinc-400">Area code</span>
-          <div className="inline-flex rounded-lg overflow-hidden border border-zinc-700" role="tablist">
-            {(['us', 'europe'] as const).map((t) => (
+        <div className="mb-3 text-sm">
+          <span className="block text-zinc-400 mb-1">Area code</span>
+          <div className="grid grid-cols-3 rounded-lg overflow-hidden border border-zinc-700" role="tablist">
+            {REGION_ORDER.map((t) => (
               <button key={t} type="button" role="tab" aria-selected={tab === t} onClick={() => pickTab(t)}
-                className={`px-3 py-1 ${tab === t ? 'bg-zinc-200 text-black font-semibold' : 'text-zinc-300'}`}>{REGIONS[t].tab}</button>
+                className={`px-1 py-1.5 whitespace-nowrap ${tab === t ? 'bg-zinc-200 text-black font-semibold' : 'text-zinc-300'}`}>{REGIONS[t].tab}</button>
             ))}
           </div>
         </div>

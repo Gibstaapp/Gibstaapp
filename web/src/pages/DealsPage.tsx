@@ -16,6 +16,13 @@ export default function DealsPage({ profile, onProfile, top }: { profile: UserPr
   const [category, setCategory] = useState<Category>(() => (pref.get('gib.cat') as Category) || 'flower');
   const [mode, setMode] = useState<Mode>(() => (pref.get('gib.mode') as Mode) || 'pickup');
   const region = useRegion();
+  // Your city's own weed refresh (San Diego and New York update separately).
+  const statusFn = useCallback(async () => {
+    const s = await api.status();
+    const sources = s.sources.filter((x) => (x.region ?? 'us') === region.id);
+    return { ...s, sources, lastRefreshAt: sources.map((x) => x.finishedAt).sort().pop() ?? s.lastRefreshAt };
+  }, [region.id]);
+  const refreshFn = useCallback(() => api.refresh(region.id), [region.id]);
   const choices = distanceChoices(region.units, DISTANCES_MI, DISTANCES_KM);
   const [maxMiles, setMaxMiles] = useState(() => snapTo(profile.radiusMiles, choices));
   const [openNow, setOpenNow] = useState(() => pref.get('gib.open') !== '0');
@@ -61,7 +68,7 @@ export default function DealsPage({ profile, onProfile, top }: { profile: UserPr
       <header className={`sticky top-0 z-20 ${ACCENT.weed.header} backdrop-blur border-b border-zinc-800 pt-[env(safe-area-inset-top)]`}>
         <div className="px-4 pt-3 pb-2 flex items-center justify-between gap-3">
           {top ?? <h1 className="text-lg font-bold tracking-tight">Gibsta<span className="text-green-400">app</span></h1>}
-          <RefreshBar onRefreshed={load} />
+          <RefreshBar onRefreshed={load} statusFn={statusFn} refreshFn={refreshFn} />
         </div>
         <Chips accent="weed" items={CATEGORY_CHIPS} value={category} onChange={setCategory} />
         <div className="flex flex-wrap items-center gap-2 px-4 pb-3 text-sm">

@@ -1,5 +1,6 @@
+import { WEED_FILES } from '@gib/shared';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { cpSync, mkdtempSync, rmSync } from 'node:fs';
+import { cpSync, existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -28,8 +29,9 @@ export function publishData(): { ok: boolean; message: string } {
     execFileSync('git', ['worktree', 'add', '--detach', wt], { cwd: ROOT, stdio: 'pipe' });
     git('checkout', '--orphan', 'data-publish');
     git('rm', '-rf', '--quiet', '.');
-    for (const f of ['weed.json', 'beer.json', 'meta.json']) cpSync(join(out, f), join(wt, f));
-    git('add', 'weed.json', 'beer.json', 'meta.json');
+    const files = ['beer.json', 'meta.json', ...Object.values(WEED_FILES) as string[]].filter((f) => existsSync(join(out, f)));
+    for (const f of files) cpSync(join(out, f), join(wt, f));
+    git('add', ...files);
     git('-c', 'user.name=Gibstaapp PC', '-c', 'user.email=gibstaapp-pc@users.noreply.github.com', 'commit', '--quiet', '-m', `PC data ${new Date().toISOString()}`);
     git('push', '--force', '--quiet', 'origin', 'HEAD:data');
     return { ok: true, message: 'PC data pushed to the data branch' };
