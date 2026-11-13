@@ -1,4 +1,5 @@
 import type { Deal, Product } from '@gib/shared';
+import { parseGrams } from './normalize.ts';
 
 /**
  * Data-quality guards applied after every refresh, so bad menu data doesn't top the rankings.
@@ -49,8 +50,22 @@ function recategorize(p: Product): Product {
   return p;
 }
 
+/**
+ * Data saved before the pack-weight fix has "14pk 7g" stored as 98g (count x weight). That data can stay around
+ * for a while (a source that fails keeps its last good data; the PC publishes its own snapshot), so repair it
+ * here: if the stored weight is exactly count x weight and the name now reads differently, trust the name.
+ */
+const PACK = /(\d+)\s*pk.*?(\d*\.?\d+)\s*g\b/i;
+export function repairPackWeight(p: Product): Product {
+  if (!p.grams) return p;
+  const m = PACK.exec(p.name);
+  if (!m) return p;
+  const fixed = parseGrams(p.name);
+  return fixed && fixed !== p.grams && Math.abs(p.grams - parseInt(m[1]) * parseFloat(m[2])) < 0.01 ? { ...p, grams: fixed } : p;
+}
+
 export function sanitize(products: Product[], deals: Deal[], log: (m: string) => void = console.log) {
-  const keptProducts = products.map(recategorize).filter((p) => !implausible(p));
+  const keptProducts = products.map(repairPackWeight).map(recategorize).filter((p) => !implausible(p));
   const keptDeals = deals.filter((d) => !isStaleHolidayDeal(d));
   const dp = products.length - keptProducts.length, dd = deals.length - keptDeals.length;
   if (dp || dd) log(`[sanitize] dropped ${dp} implausible products, ${dd} out-of-season holiday deals`);

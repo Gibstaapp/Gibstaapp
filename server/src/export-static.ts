@@ -18,6 +18,7 @@ import { refreshAll } from './refresh.ts';
 import { refreshBeer } from './beer/refresh.ts';
 import { rankItems } from './pricing/engine.ts';
 import { mergeResults } from './normalize.ts';
+import { repairPackWeight } from './sanitize.ts';
 import './sources/register.ts';
 
 export interface WeedSnapshot { stores: Store[]; products: Product[]; deals: Deal[]; status: RefreshStatus }
@@ -54,7 +55,7 @@ export function mergeWeed(snaps: WeedSnapshot[]): WeedSnapshot | null {
     if (st) statuses.push(st);
   }
   // The same shop can arrive under two ids (e.g. "dutchie:…" from the PC and "weedmaps:…" from GitHub): fold them together.
-  const merged = mergeResults([{ stores: [...storeById.values()], products, deals }]);
+  const merged = mergeResults([{ stores: [...storeById.values()], products: products.map(repairPackWeight), deals }]);
   const used = new Set(merged.products.map((p) => p.storeId));
   return {
     stores: merged.stores.filter((s) => used.has(s.id)), products: merged.products, deals: merged.deals,
