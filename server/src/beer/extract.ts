@@ -75,11 +75,15 @@ const SKIP_WORD = /pitcher|bucket|tower|growler|keg|flight|off\b|wings?|tacos?|f
 /** What comes right before the first price of a price-first list: a time, a heading, "only", a day... */
 const PRICE_FIRST_LEAD = /(?:\d\s*(?:a\.?m\.?|p\.?m\.?)\s*[\])]?|\bonly|\bhours?!?|\bdaily|\bweekdays?|\bm\s*-\s*f|[a-z]days?|\bclose|\bnight!?|\ball day|\bspecials?|\bdeals?|\bfeaturing|[:!\]|–-])\s*$/i;
 
+/** An item's name right before a price ("Coors Light Draft $5", "Apps $10"). */
+const NAME_LEAD = /(?:\b[A-Z][\w'’.&/-]*|\b(?:beers?|drafts?|lagers?|ipas?|pilsners?|light|ultra|wines?|apps|cocktails?|liquor|spritz|margaritas?|martinis?))\s*[:\-–]?\s*$/;
+
 /** "$5 drafts", "$4 domestic pints", "Pints $6", "Coors Light - $3.50" */
 export function parsePrices(text: string, happyHour: boolean): FoundPrice[] {
   const out: FoundPrice[] = [];
   const before = new RegExp(String.raw`\$\s?(\d{1,2}(?:\.\d{2})?)\s+((?:[a-z]+ ){0,2}${BEER_WORD})\b`, 'gi');
   const after = new RegExp(String.raw`\b(${BEER_WORD}\b(?: (?!and\b|or\b|with\b|plus\b|&)[a-z]+){0,2})\s*(?:[:\-–]|for|are|just|only)?\s*\$\s?(\d{1,2}(?:\.\d{2})?)`, 'gi');
+  let blockPriceFirst = false; // set below, once the block's style is known
   const push = (price: number, item: string, at: number, endIn: number) => {
     const sure = endIn === -2; // price-first list: the price is this item's
     const end = endIn === -2 ? -1 : endIn;
@@ -104,11 +108,22 @@ export function parsePrices(text: string, happyHour: boolean): FoundPrice[] {
     if (/(?:&|\band\b|\bwith\b|\bw\/)\s*(?:an?\s+)?(?:pint|glass|can|bottle|draft)s?\s+of\s+(?:[\w'’]+\s+){0,2}$/i.test(text.slice(Math.max(0, at - 40), at))) return;
     // Non-alcoholic beer isn't a beer deal ("Athletic Free Wave Hazy IPA", "N/A Heineken 0.0").
     // (Only this item's own words: back to the previous price, so a "NON-ALCOHOLIC" heading doesn't hide the beers under it.)
-    const own = text.slice(Math.max(0, at - 30), at).split(/\$\s?\d/).pop() + item;
+    const own = text.slice(Math.max(0, at - 45), at).split(/\$\s?\d/).pop() + item;
     if (/\b(?:athletic|non[- ]?alc\w*|alcohol[- ]free|n\/a|na beer|0\.0)\b/i.test(own)) return;
+    // "... Drive Pilsner $9 0.0% ABV", "Less than 0.05% ABV"
+    if (end >= 0 && /^\s*(?:less than\s+)?0\.\d+\s*%|^\s*(?:non[- ]?alc|alcohol[- ]free)/i.test(tail)) return;
     // "$10 Coors Light $7": on a name-then-price menu the $10 belongs to the item before. When the two prices disagree,
     // the one after the name wins (that match is read separately).
     // ("$4 miller high life $8 Wine" is price-first all the way: the $8 is the wine's, so the $4 stands.)
+    // In a price-first block, "Bottled Beers $6" right after "$5" is the start of the next item, not its price;
+    // a name with no price just before it ("HAPPY HOUR Miller Lite / Coors Light Draft $5") is still name-then-price.
+    if (end >= 0 && blockPriceFirst && /\$\s?\d/.test(text.slice(Math.max(0, at - 45), at))) return;
+    // "Coors Light Draft $5 Harpoon Draft, Kona Draft $7": a price right after a name, with no other price just
+    // before that name, is that name's price (whatever the rest of the block looks like).
+    if (end < 0) {
+      const leadIn = text.slice(Math.max(0, at - 45), at);
+      if (!/\$\s?\d/.test(leadIn) && !PRICE_FIRST_LEAD.test(leadIn) && NAME_LEAD.test(leadIn)) return;
+    }
     if (end < 0 && !sure) {
       const next = /^\s*[:\-–]?\s*\$\s?(\d{1,2}(?:\.\d{2})?)/.exec(tail);
       if (next && +next[1] !== price && !SKIP_WORD.test(text.slice(after0 + next[0].length, after0 + next[0].length + 14))) return;
@@ -161,12 +176,13 @@ export function parsePrices(text: string, happyHour: boolean): FoundPrice[] {
   const lead0 = first ? text.slice(Math.max(0, first.index - 30), first.index) : '';
   const priceFirst = happyHour && !!first && PRICE_FIRST_LEAD.test(lead0);
   // Name-first when the first price follows a name ("Coors Light Draft $5 Harpoon Draft, Kona Draft $7": the $5 isn't Harpoon's).
-  const nameFirst = happyHour && !priceFirst && /(?:\b[A-Z][\w'’.&/-]*|\b(?:beers?|drafts?|lagers?|ipas?|pilsners?|light|ultra|wines?|apps|cocktails?|liquor|spritz|margaritas?|martinis?))\s*[:\-–]?\s*$/.test(lead0);
+  const nameFirst = happyHour && !priceFirst && NAME_LEAD.test(lead0);
   // Some sites print every price twice, before and after the name ("$ 10 Well Liquor $ 10 DRAFT $ 7 Founders Lager $ 7"):
   // there both readings agree for real items, and a price that differs on the two sides isn't trusted.
   const doubled = [...text.matchAll(/\$\s?(\d{1,2}(?:\.\d{2})?)\s+[^$]{2,60}?\s*\$\s?\1(?![\d.])/g)].length >= 2;
   if (happyHour && !nameFirst) for (const m of text.matchAll(before)) push(+m[1], m[2], m.index ?? 0, priceFirst && !doubled ? -2 : -1);
-  if (!priceFirst || doubled) for (const m of text.matchAll(after)) push(+m[2], m[1], m.index ?? 0, (m.index ?? 0) + m[0].length);
+  blockPriceFirst = priceFirst && !doubled;
+  for (const m of text.matchAll(after)) push(+m[2], m[1], m.index ?? 0, (m.index ?? 0) + m[0].length);
   return out;
 }
 
