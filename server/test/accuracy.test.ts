@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Store } from '@gib/shared';
 import { checkIn, earnedBadges, placeBadge, visitsToNext, type VisitLog } from '@gib/shared';
-import { parseEuroPrices, parsePrices } from '../src/beer/extract.ts';
+import { extractHappyHour, parseEuroPrices, parsePrices } from '../src/beer/extract.ts';
 import { mergeResults, parseGrams } from '../src/normalize.ts';
 import { repairPackWeight } from '../src/sanitize.ts';
 
@@ -138,5 +138,100 @@ describe('euro prices (Athens bar websites)', () => {
     // From Barrett's real menu: a whiskey called "IPA Edition", under the whiskey heading.
     expect(eu('whiskey Jameson Irish Whiskey 8€ Jameson Black Barrel 10€ Jameson IPA Edition 10€')).toEqual([]);
     expect(eu('(3.42)\n\n440ml Can\n8.70 EUR')).toEqual([]);
+  });
+});
+
+// Real New York snippets that gave wrong prices or names (checked against the bars' own pages, Nov 2026).
+describe('New York menus', () => {
+  const items = (t: string, hh = false) => parsePrices(t, hh).map((p) => `${p.item}|${p.price}`);
+  it('"$5 Boot Brew – any draft $7 & under" is $5, not a $7 draft', () => {
+    expect(items('HAPPY HOUR $ 5 BOOT BREW $ 5 any draft $7 & under $ 9 add a flavor +1 BOOTRITA house margarita', true)).not.toContain('Draft|7');
+  });
+  it('combos with a shot or food are not beer prices', () => {
+    expect(items('All day everyday!!! $7 can of Miller and a shot of whiskey $8 can of Modelo and a shot of tequila Happy Hour!', true)).toEqual([]);
+    expect(items('Wing Tuesdays $1 wings 5–8 PM, minimum of 6 per order. Plus $10 beer, shot & 6 wings.', true)).toEqual([]);
+    expect(items('onions, pickles. Served with curly fries & a pint of house lager $15 Draft Beer $2 OFF', true)).toEqual([]);
+  });
+  it('a price before the name belongs to the item before it when the menu puts prices after names', () => {
+    const r = items('Blue Moon $10.00 Mich Ultra $7.00 Bronx Hazy $10.00 Coors Light $7.00 Colorado Downeast Unfiltered Cider $9.00', true);
+    expect(r).toContain('Coors Light|7');
+    expect(r).not.toContain('Coors Light|10');
+    expect(items('$ 10 Negroni $ 10 $ 10 Well Liquor $ 10 DRAFT $ 7 Founders Lager $ 7', true)).not.toContain('DRAFT|10');
+  });
+  it('price-first happy hour lists still work', () => {
+    expect(items('HAPPY HOUR MONDAY THROUGH FRIDAY UNTIL 7PM $6 DRAFT BEER $6 WELL DRINKS $6 WINES', true)).toContain('DRAFT BEER|6');
+    expect(items('$4 pbr tall boy $4 miller high life $8 Wine', true)).toContain('Miller high life|4');
+  });
+  it('names: no "TO ANY", "ABV" or "NY" in front; three brand words kept', () => {
+    expect(items('CANS *** $3 - SHOT ADD ON TO ANY CAN $5 - BUD - NARRAGANSETT')).toEqual([]);
+    expect(items('Stella Artois $8.00 Lager, 16oz, Leuven, BELG 4.8% ABV Michelob Ultra $7.00 Goose Island IPA $9.00')).toContain('Michelob Ultra|7');
+    expect(items('$8.00 Coney Island Pilsner $9.00 Coney Island, NY Coors Light $8.00 Colorado')).toContain('Coors Light|8');
+    expect(items('Coney Island Mermaid Pilsner $ 10')).toEqual(['Coney Island Mermaid Pilsner|10']);
+  });
+  it('non-alcoholic beer is skipped', () => {
+    expect(items('Athletic Free Wave Hazy IPA $ 8 Athletic Run Wild IPA $ 8')).toEqual([]);
+  });
+  it('real ones stay', () => {
+    expect(items('oast IPA $9.00 Cans/Bottles Genesee* $3.00 Miller High Life $5.00 Budweiser $6.00 Bud Light Lime $4.00')).toContain('Miller High Life|5');
+    expect(items('Peroni $ 8 Coors Light $ 7 Miller Lite $ 7')).toEqual(['Coors Light|7', 'Miller Lite|7']);
+  });
+});
+
+describe('New York happy-hour times', () => {
+  const win = (t: string) => extractHappyHour(t).windows.map((w) => `${w.start}-${w.end}`);
+  it('opening hours after a "Happy Hour" link are not the happy hour', () => {
+    expect(win('Cocktails Beer & Wine Happy Hour Events Come Visit Hours of Operation Monday : 3:00 pm – 12:00 am Tuesday')).toEqual([]);
+    expect(win('All Day Happy Hour Monday! Hours Mon–Thu: 3PM–12AM | Fri: 3PM–3AM')).toEqual([]);
+    expect(win('agave amari other spirits what we’re drinking happy hour dinner daily from 6:00 - 11:00 | v = vegan')).toEqual([]);
+  });
+  it('real happy hours stay, including late-night ones', () => {
+    expect(win('UES Happy Hour Tue–Fri 4:20–6:20PM · $8 Draft Beers')).toEqual(['16:20-18:20']);
+    expect(win('during happy hour (Sunday and Monday: 4 p.m. -4 a.m., the rest of the week')).toEqual(['16:00-04:00']);
+    expect(win('HAPPY HOUR: Monday-Friday 2-6 TUESDAY: 8pm Bingo')).toEqual(['14:00-18:00']);
+  });
+});
+
+describe('happy-hour lists: price-first vs name-first', () => {
+  const items = (t: string) => parsePrices(t, true).map((p) => `${p.item}|${p.price}`);
+  it('price-first: each price goes with the words after it', () => {
+    expect(items('HAPPY HOUR MONDAY - FRIDAY [4pm - 8pm] $5 Bottled Beers $6 Drafts $8 Pinot Grigio, Pinot Noir')).toEqual(expect.arrayContaining(['Bottled Beers|5', 'Drafts|6']));
+    expect(items('HAPPY HOUR MONDAY - FRIDAY [4pm - 8pm] $5 Bottled Beers $6 Drafts $8 Pinot Grigio')).not.toContain('Bottled Beers|6');
+    expect(items('HOUR TUESDAY TO FRIDAY | 3PM-6PM AVAILABLE AT THE BAR ONLY $6 BOTTLED BEER $7 DRAFT PINTS $8 WINES $10 M')).toEqual(expect.arrayContaining(['BOTTLED BEER|6', 'DRAFT PINTS|7']));
+    expect(items('Happy Hour (excluding holidays) Monday - Friday 4pm - 8pm $5 Beers $6 Guinness and Stella Drafts $8 Wine')).toContain('Beers|5');
+  });
+  it('name-first: the price after the name wins', () => {
+    const r = items('HAPPY HOUR Monday to Friday 4pm – 7pm Wines $8 Draught Beers $7 Bottles/Cans $6 Cocktails $10');
+    expect(r).toContain('Draught Beers|7');
+    expect(r).not.toContain('Draught Beers|8');
+    expect(items('Happy Hour Monday through Friday, 4–7pm. Apps $10 Draft Beer $5 Featured Cocktails $10')).toEqual(['Draft Beer|5']);
+  });
+});
+
+describe('name-first happy hours never take the price before a name', () => {
+  it('"Coors Light Draft $5 Harpoon Draft, Stella Draft / Kona Draft $7": Harpoon is $7, not $5', () => {
+    const r = parsePrices('HAPPY HOUR Miller Lite / Coors Light Draft $5 Harpoon Draft, Stella Draft / Kona Draft $7 Rotating Seasonal Draft $8', true).map((p) => `${p.item}|${p.price}`);
+    expect(r).toContain('Coors Light Draft|5');
+    expect(r).not.toContain('Harpoon Draft|5');
+  });
+  it('"Happy hour specials $5 drafts" is still price-first', () => {
+    expect(parsePrices('Happy hour specials $5 drafts $6 wells', true).map((p) => `${p.item}|${p.price}`)).toEqual(['Drafts|5']);
+  });
+});
+
+describe('double-printed prices, price-first menus, cocktails', () => {
+  const items = (t: string, hh = false) => parsePrices(t, hh).map((p) => `${p.item}|${p.price}`);
+  it('"$ 10 Well Liquor $ 10 DRAFT $ 7 Founders Lager $ 7": DRAFT is a heading, not $10', () => {
+    const r = items('Happy Hour Monday - Friday 2pm - 6pm $ 14 $ 10 Negroni $ 10 $ 10 Manhattan $ 10 $ 10 Well Liquor $ 10 DRAFT $ 7 Founders Lager $ 7 $ 8 Founders IPA $ 8', true);
+    expect(r).not.toContain('DRAFT|10');
+    expect(r).toEqual(expect.arrayContaining(['Founders Lager|7', 'Founders IPA|8']));
+  });
+  it('a price-first list read as a menu does not shift prices', () => {
+    expect(items('HAPPY HOUR MONDAY - FRIDAY [4pm - 8pm] $5 Bottled Beers $6 Drafts $8 Pinot Grigio')).not.toContain('Bottled Beers|6');
+  });
+  it('a beer cocktail is not a beer price', () => {
+    expect(items('HAPPY HOUR $ 7 SPAGHETT miller high life, aperol, lemon $ 7 $ 8 ROSE $ 8', true)).toEqual([]);
+  });
+  it('"ASK BARTENDER" is not part of a name', () => {
+    expect(items('HOT DRINKS - ASK BARTENDER DRAFTS $8 - LAGER - PILSNER')).not.toContain('ASK BARTENDER DRAFTS|8');
   });
 });

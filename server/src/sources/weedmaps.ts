@@ -63,7 +63,8 @@ const CATEGORY_WORDS: [RegExp, Category][] = [
   [/\bflower\b|\beighths?\b|\b8ths?\b|\bounces?\b|\bzips?\b|\bbuds?\b|\bsmalls\b|\bshake\b|\bquarters?\b/i, 'flower'],
 ];
 
-function categoriesIn(s: string): Category[] {
+/** Product categories a deal's text names ('Pre-Rolls 3 for $30' -> preroll). Shared with Jane. */
+export function categoriesIn(s: string): Category[] {
   const out: Category[] = [];
   for (const [re, c] of CATEGORY_WORDS) if (re.test(s) && !out.includes(c)) out.push(c);
   return out;

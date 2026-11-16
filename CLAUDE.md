@@ -62,7 +62,8 @@ Two developers each work with their own Claude Code on this repo. Use a branch +
 - **Times:** the server runs in Pacific time. Beer queries send `tzOffset`, so open/closed and happy hours use the phone's local time.
   Weed store hours are always judged on San Diego time (`wallClockIn`). Tests pin the time zone in `server/vitest.config.ts`.
 - **Athens prices** go in `server/beer-seed.json` only from the bar's own menu (website or its Untappd menu), with `currency: 'EUR'`, `url`, `date` and the original text as `note`. Never from blogs or reviews. A separate daily step, `refreshAthensMenus` (status "Athens bar menus (€)", `npm run athens -w server`), reads Athens bars' own websites with `parseEuroPrices`; Untappd is never read automatically.
-- **100-mile rule:** nothing farther than `MAX_RESULT_MILES` (100) from the home area code is ever shown, weed or beer. Prices must be in the place's own currency (`regionAt`), so Athens is always €.
+- **100-mile rule (weed only):** no weed shop farther than `MAX_RESULT_MILES` (100) from the home area code is ever shown. The beer locator has no such limit: it searches around wherever the phone is (GPS), or the home area code without GPS. Prices are always in the place's own currency (`regionAt`), so Athens is always €.
 - **Beer price parsing** is strict on purpose (`server/test/accuracy.test.ts` holds real snippets that used to produce wrong prices). Add the snippet as a test when you find a new bad one.
 - **Weed sources** (Weedmaps/Eaze) scrape with Playwright and are fragile. A failed source keeps its previous data.
+- **Jane specials** of unknown types (`bulk_pricing`, brand...) cover only the products their title names (category words, the store's brands); one whose products can't be told is skipped, never applied to the whole menu.
 - Don't commit anything under `server/data/`, `tools/`, APKs or logs.

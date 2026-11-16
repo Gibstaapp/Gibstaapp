@@ -2,7 +2,7 @@ import type { BeerPrice, BeerQuery, BeerVenue, HappyHour, RankedVenue } from '@g
 import { haversineMiles } from '../pricing/engine.ts';
 import { bearingDegrees, openState, windowActive } from './hours.ts';
 import { inGreece, wallClockIn } from '../hours.ts';
-import { MAX_RESULT_MILES, regionAt } from '@gib/shared';
+import { regionAt } from '@gib/shared';
 
 /** Fluid ounces for a size label, so a $3 can and a $6 pint can be compared fairly. */
 export function ouncesOf(size?: string): number {
@@ -65,7 +65,6 @@ export function rankVenues(
     if (q.kind && q.kind !== 'all' && v.kind !== q.kind) continue;
     const distanceMiles = haversineMiles(q.lat, q.lng, v.lat, v.lng);
     if (q.maxMiles && distanceMiles > q.maxMiles) continue;
-    if (q.home && haversineMiles(q.home.lat, q.home.lng, v.lat, v.lng) > MAX_RESULT_MILES) continue;
     const localNow = inGreece(v) ? athensNow : now;
     const { isOpen, label: hoursLabel, closingSoon } = openState(v.openingHours, localNow, v);
     if (q.openNow && isOpen === false) continue;

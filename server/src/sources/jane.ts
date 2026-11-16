@@ -5,6 +5,7 @@ import type { Page } from 'playwright';
 import { pause, withContext } from './browser.ts';
 import { mapCategory, parseGrams, parseThcMg } from '../normalize.ts';
 import { janeHoursToOsm } from '../hours.ts';
+import { categoriesIn } from './weedmaps.ts';
 
 /**
  * iHeartJane. Everything comes from plain fetch, no browser needed:
@@ -602,8 +603,22 @@ export function dealFromSpecial(sp: any, ctx: StoreCtx): { deal?: Deal; skip?: s
     const maxApps = num(b.max_applications_per_cart);
     if (maxApps) fine.push(`Max ${maxApps} per order`);
   } else {
-    // bulk_pricing, brand, or anything new: try the text.
+    // bulk_pricing, brand, or anything new: try the text. Jane's own product rules when it has any; otherwise the
+    // products the title names ("Voice Of The Plant Pre-Rolls 3 for $30" -> that brand's pre-rolls). A deal whose
+    // products we can't tell is skipped: applied to the whole menu it made a $140 ounce "$10" (3 for $30).
     core = null;
+    const t = resolveTargets(sp, ctx);
+    if (t && 'ids' in t) {
+      if (!t.ids.length) return { skip: 'no matching products on menu' };
+      appliesTo = targetToAppliesTo(t);
+    } else {
+      const text = [title, ...desc].join(' ');
+      const lc = text.toLowerCase();
+      const categories = categoriesIn(text);
+      const brands = [...new Set(ctx.products.map((p) => p.brand).filter((b): b is string => !!b && b.length > 2 && lc.includes(b.toLowerCase())))];
+      if (!categories.length && !brands.length) return { skip: `can't tell which products "${title}" covers` };
+      appliesTo = { ...(categories.length ? { categories } : {}), ...(brands.length ? { brands } : {}) };
+    }
   }
 
   if (!core) {
