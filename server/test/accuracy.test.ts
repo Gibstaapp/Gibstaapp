@@ -235,3 +235,16 @@ describe('double-printed prices, price-first menus, cocktails', () => {
     expect(items('HOT DRINKS - ASK BARTENDER DRAFTS $8 - LAGER - PILSNER')).not.toContain('ASK BARTENDER DRAFTS|8');
   });
 });
+
+describe('live New York leftovers (Nov 16)', () => {
+  const items = (t: string, hh = false) => parsePrices(t, hh).map((p) => `${p.item}|${p.price}`);
+  it("Triona's: a block that starts price-first still gives Harpoon $7, not $5", () => {
+    const t = 'Happy Hours & Specials LATE NIGHT $10 Espresso Martini $7 Draft Beer $8 03:00 PM - 07:00 PM HAPPY HOUR Miller Lite / Coors Light Draft $5 Harpoon Draft, Stella Draft / Kona Draft $7 Rotating Seasonal Draft $8';
+    const r = items(t, true);
+    expect(r).not.toContain('Harpoon Draft|5');
+    expect(r).toContain('Coors Light Draft|5');
+  });
+  it('non-alcoholic named before the brand, or marked 0.0% after the price', () => {
+    expect(items('eaux, France • 2014 Non-Alcoholic Bitburger Drive Pilsner $9 0.0% ABV Athletic Brewing Run Wild IPA $9 Less than 0.05% ABV')).toEqual([]);
+  });
+});
