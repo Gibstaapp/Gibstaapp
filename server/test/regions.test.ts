@@ -127,14 +127,14 @@ describe('San Diego and Athens stay apart', () => {
   const plaka = AREAS['105 58'], uc = AREAS['92122'];
   const bar = (id: string, lat: number, lng: number) => ({ id, name: id, kind: 'bar' as const, lat, lng, source: 'osm' as const });
   const sdBar = bar('sd', 32.85, -117.2), athensBar = bar('ath', 37.976, 23.726), oceanside = bar('far-sd', 33.2, -117.38), lasVegas = bar('vegas', 36.17, -115.14);
-  it('beer: nothing more than 100 mi from the home area code', () => {
+  it('beer: bars around wherever you are, however far from home (no 100-mile limit)', () => {
     const all = [sdBar, athensBar, oceanside, lasVegas];
-    // Home in Athens, even if the search point is San Diego: only Athens bars, never San Diego ones.
-    expect(rankVenues({ lat: uc.lat, lng: uc.lng, home: plaka }, all, [], []).map((r) => r.venue.id)).toEqual(['ath']);
-    expect(rankVenues({ lat: plaka.lat, lng: plaka.lng, home: plaka }, all, [], []).map((r) => r.venue.id)).toEqual(['ath']);
-    // Home in San Diego: San Diego County yes, Las Vegas (~250 mi) and Athens no.
-    expect(rankVenues({ lat: uc.lat, lng: uc.lng, home: uc }, all, [], []).map((r) => r.venue.id).sort()).toEqual(['far-sd', 'sd']);
-    expect(MAX_RESULT_MILES).toBe(100);
+    const near = (p: { lat: number; lng: number }) => rankVenues({ lat: p.lat, lng: p.lng, maxMiles: 40 }, all, [], []).map((r) => r.venue.id).sort();
+    // A San Diego customer travelling: Athens bars in Athens, Las Vegas bars in Las Vegas, San Diego ones at home.
+    expect(near(plaka)).toEqual(['ath']);
+    expect(near({ lat: 36.17, lng: -115.14 })).toEqual(['vegas']);
+    expect(near(uc)).toEqual(['far-sd', 'sd']);
+    expect(MAX_RESULT_MILES).toBe(100); // still the weed limit
   });
   it('weed: no store more than 100 mi from home, delivery included', () => {
     const store = (id: string, lat: number, lng: number): Store => ({ id, name: id, address: '1 Main St', city: 'X', lat, lng, sources: [{ source: 'sample', externalId: id }],
@@ -148,7 +148,7 @@ describe('San Diego and Athens stay apart', () => {
   });
   it('Athens prices are always euros; a dollar price on a Greek website is dropped', () => {
     const p = (id: string, price: number, currency?: 'EUR') => ({ id, venueId: 'ath', item: 'Draft', price, ...(currency ? { currency } : {}), kind: 'regular' as const, source: 'website' as const, reportedAt: '2026-11-13' });
-    const [r] = rankVenues({ lat: plaka.lat, lng: plaka.lng, home: plaka }, [athensBar], [p('usd', 3), p('eur', 5, 'EUR')], []);
+    const [r] = rankVenues({ lat: plaka.lat, lng: plaka.lng }, [athensBar], [p('usd', 3), p('eur', 5, 'EUR')], []);
     expect(r.prices.map((x) => x.id)).toEqual(['eur']);
     expect(r.best).toMatchObject({ price: 5, currency: 'EUR' });
     expect(regionAt(athensBar).currency).toBe('EUR');

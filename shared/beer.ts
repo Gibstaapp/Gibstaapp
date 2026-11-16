@@ -76,8 +76,6 @@ export interface BeerQuery {
   sort?: BeerSort;
   maxMiles?: number;
   limit?: number;
-  /** Home area code location: places more than MAX_RESULT_MILES from it are never returned. */
-  home?: { lat: number; lng: number };
 }
 
 export interface BeerReport {

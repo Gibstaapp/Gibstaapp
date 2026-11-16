@@ -57,29 +57,62 @@ export function parseTimeRange(text: string): { start: string; end: string } | n
   const start = to24(+m[1], +(m[2] ?? 0), m[3], m[3] ? undefined : endAp);
   const end = m[7] ? '02:00' : to24(+m[4], +(m[5] ?? 0), endAp, undefined);
   if (!start || !end || start === end) return null;
+  // Over 10 hours is opening hours, not a happy hour ("6:00 - 11:00" dinner, "3PM-12AM"), unless the end is spelled
+  // out as late night ("4 p.m. - 4 a.m.", "2PM-Close").
+  const mins = (t: string) => +t.slice(0, 2) * 60 + +t.slice(3);
+  if ((mins(end) - mins(start) + 1440) % 1440 > 600 && !m[7] && !/^a/i.test(endAp ?? '')) return null;
   // Sanity: happy hours start between 10am and 11pm (or late-night reverse happy hours)
   const sh = +start.slice(0, 2);
   if (sh < 10 && sh > 2) return null;
   return { start, end };
 }
 
-const BEER_WORD = String.raw`(?:drafts?|draughts?|pints?|beers?|brews?|taps?|domestics?|crafts?|tall ?boys?|lagers?|ipas?|pilsners?|bottles?|cans?|mich(?:elob)?(?: ultra)?|coors(?: light)?|bud(?: light)?|modelo|pacifico|tecate|corona|stella|blue moon|pbr|miller(?: lite)?|house beers?)`;
+const BEER_WORD = String.raw`(?:drafts?|draughts?|pints?|beers?|brews?|taps?|domestics?|crafts?|tall ?boys?|lagers?|ipas?|pilsners?|bottles?|cans?|mich(?:elob)?(?: ultra)?|coors(?: light)?|bud(?: light)?|modelo|pacifico|tecate|corona|stella|blue moon|pbr|miller(?: lite| high life)?|house beers?)`;
 // Not beer, or not a single beer: wine/soda/food/etc. near the price.
-const NOT_BEER_CONTEXT = /\b(wine|glass|soda|juice|coke|sprite|lemonade|iced tea|coffee|kombucha|root beer|ginger beer|ice cream|float|soaked|battered|fried|cheese|sauce|bratwurst|upgrade|cocktails?|highballs?|spritz|champagne|mimosas?|all you can|spaghetti|pinot|cabernet|chardonnay|sauvignon|merlot|ros[eé]|prosecco|seltzers?)\b/i;
+const NOT_BEER_CONTEXT = /\b(wine|glass|soda|juice|coke|sprite|lemonade|iced tea|coffee|kombucha|root beer|ginger beer|ice cream|float|soaked|battered|fried|cheese|sauce|bratwurst|upgrade|cocktails?|highballs?|spritz|champagne|mimosas?|all you can|spaghetti|pinot|cabernet|chardonnay|sauvignon|merlot|ros[eé]|prosecco|seltzers?|aperol|campari|vodka|mezcal|bitters)\b/i;
 const SKIP_WORD = /pitcher|bucket|tower|growler|keg|flight|off\b|wings?|tacos?|food|wine|wells?|cocktail|margarita|mimosa|champagne|shot|sliders?|fries|burger|pizza|appetizer/i;
+
+/** What comes right before the first price of a price-first list: a time, a heading, "only", a day... */
+const PRICE_FIRST_LEAD = /(?:\d\s*(?:a\.?m\.?|p\.?m\.?)\s*[\])]?|\bonly|\bhours?!?|\bdaily|\bweekdays?|\bm\s*-\s*f|[a-z]days?|\bclose|\bnight!?|\ball day|\bspecials?|\bdeals?|\bfeaturing|[:!\]|–-])\s*$/i;
 
 /** "$5 drafts", "$4 domestic pints", "Pints $6", "Coors Light - $3.50" */
 export function parsePrices(text: string, happyHour: boolean): FoundPrice[] {
   const out: FoundPrice[] = [];
   const before = new RegExp(String.raw`\$\s?(\d{1,2}(?:\.\d{2})?)\s+((?:[a-z]+ ){0,2}${BEER_WORD})\b`, 'gi');
   const after = new RegExp(String.raw`\b(${BEER_WORD}\b(?: (?!and\b|or\b|with\b|plus\b|&)[a-z]+){0,2})\s*(?:[:\-–]|for|are|just|only)?\s*\$\s?(\d{1,2}(?:\.\d{2})?)`, 'gi');
-  const push = (price: number, item: string, at: number, end: number) => {
+  const push = (price: number, item: string, at: number, endIn: number) => {
+    const sure = endIn === -2; // price-first list: the price is this item's
+    const end = endIn === -2 ? -1 : endIn;
     // '$7 wells' after a beer word: the price belongs to the next thing
     if (end >= 0 && SKIP_WORD.test(text.slice(end, end + 14))) return;
     const ctx = text.slice(Math.max(0, at - 25), at + item.length + 30);
-    if (SKIP_WORD.test(item) || NOT_BEER_CONTEXT.test(text.slice(Math.max(0, at - 30), (end >= 0 ? end : at + item.length + 8) + 12)) || /\$\s?\d+(?:\.\d{2})?\s*off/i.test(ctx.slice(20, 45))) return;
+    // Nearby words that say "not beer": up to 12 chars past the price, or for "$5 drafts" style up to the next price.
+    const itemEnd = end >= 0 ? end : text.indexOf(item, at) + item.length;
+    const ctxEnd = end >= 0 ? end + 12 : itemEnd + (/\$/.exec(text.slice(itemEnd, itemEnd + 12))?.index ?? 12);
+    if (SKIP_WORD.test(item) || NOT_BEER_CONTEXT.test(text.slice(Math.max(0, at - 30), ctxEnd)) || /\$\s?\d+(?:\.\d{2})?\s*off/i.test(ctx.slice(20, 45))) return;
     if (price < 1.5 || price > 15) return;
     const lead = text.slice(Math.max(0, at - 24), at);
+    // Text right after the price (name-then-price) or right after the name ("$5 drafts"-style).
+    const after0 = end >= 0 ? end : text.indexOf(item, at) + item.length;
+    const tail = text.slice(after0, after0 + 30);
+    // "$5 Boot Brew – any draft $7 & under": $7 is the limit, not a price.
+    if (end >= 0 && /^\s*(?:&|and|or)\s*(?:under|less|below)\b/i.test(tail)) return;
+    // "$8 can of Modelo and a shot of tequila", "$10 beer, shot & 6 wings": a combo, not the price of a beer.
+    // (After a name-then-price match only the words between name and price count: the next line may be a shot.)
+    if (/^[^$]{0,22}\bshots?\b/i.test(end >= 0 ? text.slice(at + item.length, end) : tail) || /\bshot\b[^$]{0,12}$/i.test(lead)) return;
+    // "Burger served with fries & a pint of house lager $15": the beer comes with the food.
+    if (/(?:&|\band\b|\bwith\b|\bw\/)\s*(?:an?\s+)?(?:pint|glass|can|bottle|draft)s?\s+of\s+(?:[\w'’]+\s+){0,2}$/i.test(text.slice(Math.max(0, at - 40), at))) return;
+    // Non-alcoholic beer isn't a beer deal ("Athletic Free Wave Hazy IPA", "N/A Heineken 0.0").
+    // (Only this item's own words: back to the previous price, so a "NON-ALCOHOLIC" heading doesn't hide the beers under it.)
+    const own = text.slice(Math.max(0, at - 30), at).split(/\$\s?\d/).pop() + item;
+    if (/\b(?:athletic|non[- ]?alc\w*|alcohol[- ]free|n\/a|na beer|0\.0)\b/i.test(own)) return;
+    // "$10 Coors Light $7": on a name-then-price menu the $10 belongs to the item before. When the two prices disagree,
+    // the one after the name wins (that match is read separately).
+    // ("$4 miller high life $8 Wine" is price-first all the way: the $8 is the wine's, so the $4 stands.)
+    if (end < 0 && !sure) {
+      const next = /^\s*[:\-–]?\s*\$\s?(\d{1,2}(?:\.\d{2})?)/.exec(tail);
+      if (next && +next[1] !== price && !SKIP_WORD.test(text.slice(after0 + next[0].length, after0 + next[0].length + 14))) return;
+    }
     // "+$2 ..." is an add-on, "2 Tacos + Mexican Lager $14" is a combo: neither is the price of a beer.
     // ("BEER + SELTZER + NON-ALCOHOLIC Coors Light $8" is a heading, not an add-on: all-caps words are fine.)
     const plus = /\+\s*((?:[\p{L}-]+ ){0,2})$/u.exec(lead);
@@ -94,12 +127,20 @@ export function parsePrices(text: string, happyHour: boolean): FoundPrice[] {
     if (end >= 0) {
       const words = text.slice(Math.max(0, at - 40), at).trimEnd().split(/\s+/);
       const brand: string[] = [];
-      while (brand.length < 2 && words.length) {
+      while (brand.length < 3 && words.length) {
         const w = words.pop()!;
-        if (!/^[A-Z][\w'’.&-]*$/.test(w) || /^(beers?|drafts?|draughts?|bottles?|cans?|on|tap|menu|happy|hour|wines?|cocktails?|and|the|our|all|select|BEERS?|DRAFTS?)$/i.test(w)) break;
+        // Not brand words: headings, "TO ANY", "ABV", and state/country codes from the line before ("Coney Island, NY").
+        if (!/^[A-Z][\w'’.&-]*$/.test(w) || /^[A-Z]{2}$/.test(w) || /^(beers?|drafts?|draughts?|bottles?|cans?|on|tap|menu|happy|hour|wines?|cocktails?|and|the|our|all|select|to|any|add|per|of|for|abv|ibu|ask|bartender|server|BEERS?|DRAFTS?)$/i.test(w)) break;
         brand.unshift(w);
       }
       if (brand.length) clean = `${brand.join(' ')} ${clean}`;
+    }
+    // "[4pm - 8pm] $5 Bottled Beers $6 Drafts" read as a menu: a plain "Bottled Beers" with a different price right
+    // before it, itself after a time or heading, is a price-first list: the $6 after it is the next item's.
+    // ("Apps $10 Draft Beer $5" is name-first: there the $10 follows a name, and the $5 stands.)
+    if (end >= 0 && /^(?:bottled |canned |draft |domestic |craft |house )?(?:beers?|drafts?|bottles?|cans?|pints?)$/i.test(clean)) {
+      const pre = /\$\s?(\d{1,2}(?:\.\d{2})?)\s+(?:[A-Za-z]+\s+){0,2}$/.exec(text.slice(Math.max(0, at - 30), at));
+      if (pre && +pre[1] !== price && PRICE_FIRST_LEAD.test(text.slice(Math.max(0, at - 30 - 30 + (pre.index ?? 0)), Math.max(0, at - 30) + (pre.index ?? 0)))) return;
     }
     // A plural menu heading in front of the beer isn't part of its name: "Bottles Pacifico $8" -> "Pacifico".
     clean = clean.replace(/^(?:bottles|cans|beers)\s+(?=\S)/i, '');
@@ -112,8 +153,20 @@ export function parsePrices(text: string, happyHour: boolean): FoundPrice[] {
     out.push({ item: cap(clean), price, size, happyHour, text: squish(text.slice(Math.max(0, at - 60), at + 80)) });
   };
   // '$5 drafts' style only in happy-hour text; on menus the price follows the name ('Modelo $7').
-  if (happyHour) for (const m of text.matchAll(before)) push(+m[1], m[2], m.index ?? 0, -1);
-  for (const m of text.matchAll(after)) push(+m[2], m[1], m.index ?? 0, (m.index ?? 0) + m[0].length);
+  // Happy-hour text comes in two styles, told apart by what's right before its first price:
+  //   price-first  "Monday - Friday [4pm - 8pm] $5 Bottled Beers $6 Drafts $8 Pinot"  (a time or heading)
+  //   name-first   "4pm – 7pm Wines $8 Draught Beers $7 Bottles/Cans $6"               (an item's name)
+  // In a price-first list each price goes with the words after it, so the name-then-price reading is skipped there.
+  const first = /\$\s?\d/.exec(text);
+  const lead0 = first ? text.slice(Math.max(0, first.index - 30), first.index) : '';
+  const priceFirst = happyHour && !!first && PRICE_FIRST_LEAD.test(lead0);
+  // Name-first when the first price follows a name ("Coors Light Draft $5 Harpoon Draft, Kona Draft $7": the $5 isn't Harpoon's).
+  const nameFirst = happyHour && !priceFirst && /(?:\b[A-Z][\w'’.&/-]*|\b(?:beers?|drafts?|lagers?|ipas?|pilsners?|light|ultra|wines?|apps|cocktails?|liquor|spritz|margaritas?|martinis?))\s*[:\-–]?\s*$/.test(lead0);
+  // Some sites print every price twice, before and after the name ("$ 10 Well Liquor $ 10 DRAFT $ 7 Founders Lager $ 7"):
+  // there both readings agree for real items, and a price that differs on the two sides isn't trusted.
+  const doubled = [...text.matchAll(/\$\s?(\d{1,2}(?:\.\d{2})?)\s+[^$]{2,60}?\s*\$\s?\1(?![\d.])/g)].length >= 2;
+  if (happyHour && !nameFirst) for (const m of text.matchAll(before)) push(+m[1], m[2], m.index ?? 0, priceFirst && !doubled ? -2 : -1);
+  if (!priceFirst || doubled) for (const m of text.matchAll(after)) push(+m[2], m[1], m.index ?? 0, (m.index ?? 0) + m[0].length);
   return out;
 }
 
@@ -129,8 +182,11 @@ export function extractHappyHour(pageText: string): { windows: FoundWindow[]; pr
   for (const m of text.matchAll(re)) {
     const at = m.index ?? 0;
     const chunk = text.slice(Math.max(0, at - 120), at + 320);
-    // Only look right after the words 'happy hour' so nearby events don't leak in.
-    const after = text.slice(at, at + 160);
+    // Only look right after the words 'happy hour' so nearby events don't leak in, and stop where the site moves on to
+    // its opening hours or another menu ("Happy Hour  Events  Hours of Operation Monday 3:00 pm – 12:00 am").
+    let after = text.slice(at, at + 160);
+    const stop = /\b(?:hours of operation|opening hours|(?<!happy\s?)hours\b|kitchen|dinner|brunch|lunch menu|location|address)/i.exec(after.slice(m[0].length + 2));
+    if (stop) after = after.slice(0, m[0].length + 2 + stop.index);
     const time = parseTimeRange(after);
     const days = parseDays(after) ?? parseDays(text.slice(Math.max(0, at - 40), at)) ?? []; // [] = days not listed
     if (time && !windows.some((w) => w.start === time.start && w.end === time.end && w.days.join() === days.join())) {

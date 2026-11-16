@@ -66,6 +66,16 @@ describe('jane dealFromSpecial', () => {
     enabled_thursday: true, enabled_friday: true, enabled_saturday: true, reservation_modes: { kiosk: true, pickup: true, delivery: true },
   };
 
+  it('bulk_pricing "3 for $30" only covers the products its title names, never the whole menu', () => {
+    // Real New York special (Flynnstoned, Nov 2026): applied to everything it priced a $140 ounce of flower at $10.
+    const { deal } = dealFromSpecial({ ...base, title: 'Jeeter Pre-Rolls 3 for $30', special_type: 'bulk_pricing' }, ctx);
+    expect(deal?.appliesTo).toEqual({ categories: ['preroll'], brands: ['Jeeter'] });
+    // Nothing named: we can't tell which products, so no deal.
+    const r = dealFromSpecial({ ...base, title: 'Mix & Match 3 for $30', special_type: 'bulk_pricing' }, ctx);
+    expect(r.deal).toBeUndefined();
+    expect(r.skip).toMatch(/can't tell/);
+  });
+
   it('brand product special on Thursdays, pickup only', () => {
     const { deal } = dealFromSpecial({
       ...base, title: 'JEETER [SPECIAL: THURS]', special_type: 'product', discount_type: 'percent', discount_percent: 52,
