@@ -141,6 +141,9 @@ export function parsePrices(text: string, happyHour: boolean): FoundPrice[] {
     if (plus && !(plus[1].trim() && plus[1] === plus[1].toUpperCase())) return;
     // "Nachos & a Beer $14", "Pizza and a Pint $17": a food combo, not the price of a beer.
     if (/(?:&|\band\b|\bw\/|\bwith\b)\s*(?:an?\s+)?$/i.test(lead) || /(?:&|\band\b|\bwith\b)\s*(?:an?\s+)?$/i.test(text.slice(Math.max(0, at - 10), at))) return;
+    // A price inside a happy-hour block ("Happy Hour Monday-Friday 3PM-5PM | Drinks Drafts $5.00") is the happy-hour
+    // price, read with its times by extractHappyHour: never the everyday price.
+    if (!happyHour && /happy\s*hour/i.test(text.slice(Math.max(0, at - 250), at))) return;
     // "$6 until 6pm": a timed special we can't place, so don't show it as the everyday price.
     if (!happyHour && end >= 0 && /^\s*(?:until|till?|before)\s+\d/i.test(text.slice(end, end + 16))) return;
     let clean = item.trim().replace(/\s+/g, ' ');
@@ -153,7 +156,7 @@ export function parsePrices(text: string, happyHour: boolean): FoundPrice[] {
         const w = words.pop()!;
         if (w === '-' || w === '–') continue; // "Stone - Delicious IPA": the dash only separates brewery and beer
         // Not brand words: headings, "TO ANY", "ABV", and state/country codes from the line before ("Coney Island, NY").
-        if (!/^[A-Z][\w'’.&-]*$/.test(w) || /^[A-Z]{2}$/.test(w) || /^(beers?|drafts?|draughts?|bottles?|cans?|on|tap|menu|happy|hour|wines?|cocktails?|and|the|our|all|select|to|any|add|per|of|for|abv|ibu|ask|bartender|server|BEERS?|DRAFTS?)$/i.test(w)) break;
+        if (!/^[A-Z][\w'’.&-]*$/.test(w) || /^[A-Z]{2}$/.test(w) || /^(beers?|drafts?|draughts?|bottles?|cans?|on|tap|menu|happy|hour|wines?|cocktails?|and|the|our|all|select|to|any|add|per|of|for|abv|ibu|ask|bartender|server|drinks?|beverages?|BEERS?|DRAFTS?)$/i.test(w)) break;
         brand.unshift(w);
       }
       if (brand.length) clean = `${brand.join(' ')} ${clean}`;
@@ -220,7 +223,11 @@ export function extractHappyHour(pageText: string): { windows: FoundWindow[]; pr
     for (const p of parsePrices(text.slice(at, at + 400), true)) {
       if (!prices.some((x) => x.price === p.price && x.item === p.item)) prices.push(p);
     }
-    for (const f of parseFoodPrices(text.slice(at, at + 400), true)) {
+    // Food only up to the next time range: "... Food Specials  Mussel Up Monday 5PM-9PM | $1.25 Oysters" is another special.
+    let foodChunk = text.slice(at, at + 400);
+    const ranges = [...foodChunk.matchAll(/\d{1,2}(?::\d{2})?\s*(?:a\.?m\.?|p\.?m\.?)?\s*[-–]\s*\d{1,2}(?::\d{2})?\s*(?:a\.?m\.?|p\.?m\.?)/gi)];
+    if (ranges.length > 1) foodChunk = foodChunk.slice(0, Math.max(0, (ranges[1].index ?? 0) - 30));
+    for (const f of parseFoodPrices(foodChunk, true)) {
       if (!food.some((x) => x.price === f.price && x.item.toLowerCase() === f.item.toLowerCase())) food.push(f);
     }
   }
@@ -322,12 +329,19 @@ export function extractEuroHappyHour(pageText: string): { windows: FoundWindow[]
 const FOOD_WORD = String.raw`(?:(?:cheese)?burgers?|hot ?dogs?|dogs?|brats?|bratwursts?|sausages?|tacos?|wings?|pizzas?|slices?|nachos|fries|tots|sliders?|sandwich(?:es)?|subs?|gyros?|quesadillas?|burritos?|pretzels?|tenders|nuggets|wraps?|flatbreads?|appetizers?|apps|bites|salads?|soups?|pastas?|ribs|platters?|entr[eé]es?|plates?|bowls?|chili|steaks?|chicken|fish (?:and|&) chips|poke|ramen|dumplings?|empanadas?|calamari|mozzarella sticks|mac (?:and|&) cheese|grilled cheese|hummus|quesabirria|birria|elote|oysters?|clams?|mussels?|shrimp|ceviche|crudo|meatballs?)`;
 const FOOD_RE = new RegExp(String.raw`\b${FOOD_WORD}\b`, 'i');
 const BEER_RE = new RegExp(String.raw`\b${BEER_WORD}\b`, 'i');
+/** Under a beer heading but not a beer. */
+const NOT_BEER_ITEM = /\b(?:pepsi|coke|cola|sprite|7 ?up|dr\.? pepper|mountain dew|fanta|water|tea|chai|iced|hot|coffee|juice|soda|lemonade|milk|sake|nama|nigori|junmai|soju|wine|to go|six[- ]?pack|6[- ]?pack|growler|crowler|keg|merch|t-?shirt|glass(?:ware)?|refills?)\b/i;
 /** Things on a menu that are neither beer nor food deals. */
-const NOT_FOOD = /\b(?:soda|sodas|soft drinks?|iced tea|tea|coffee|espresso|latte|juice|lemonade|water|pellegrino|wine|ros[eé]|brut|champagne|magnum|btl|bottle service|cocktails?|margaritas?|mimosas?|martinis?|mules?|spritz|sangria|shots?|whiskey|whisky|bourbon|vodka|tequila|mezcal|gin|rum|liquor|spirits|titos|seltzers?|kombucha|drinks?|gift cards?|catering|party tray|delivery fee|tip|tax|guests?|people|persons?|parking|tickets?|admission|trivia|karaoke|bingo|happy hour|dining for|plates, silverware|silverware)\b/i;
+const NOT_FOOD = /\b(?:soda|sodas|soft drinks?|iced tea|tea|coffee|espresso|latte|juice|lemonade|water|pellegrino|wine|ros[eé]|brut|champagne|prosecco|bubbly|cava|sparkling|magnum|btl|bottle service|cocktails?|margaritas?|mimosas?|martinis?|mules?|spritz|sangria|shots?|whiskey|whisky|bourbon|vodka|tequila|mezcal|gin|rum|liquor|spirits|titos|seltzers?|kombucha|drinks?|gift cards?|catering|party tray|delivery fee|tip|tax|guests?|people|persons?|parking|tickets?|admission|trivia|karaoke|bingo|happy hour|dining for|plates, silverware|silverware)\b/i;
 /** Dates and weekdays ("Thursday November 26th $2"): a calendar line, not a dish (unless it names one: "Taco Tuesday"). */
 const DATE_WORD = /\b(?:mon|tues|wednes|thurs|fri|satur|sun)days?\b|\b(?:january|february|march|april|may|june|july|august|september|october|november|december)\b|\b\d{1,2}(?:st|nd|rd|th)\b/i;
 /** "2 Tacos + Mexican Lager", "Burger & a beer": food that comes with a beer (not "Beer Battered Fish", "Beer cheese"). */
 const comesWithBeer = (name: string) => BEER_RE.test(name.replace(/\bbeer[- ]?(?:battered|braised|cheese|brat|bread|mustard|can chicken)\b/gi, ''));
+/** "Breakfast in America", "The Big Shoulders", "Da Beef": a dish's name, not a description ("Creamy tomato curry with spices"). */
+const looksLikeTitle = (name: string) => {
+  const words = name.split(' ').filter((w) => !/^(?:a|an|and|&|of|the|in|on|with|w\/|de|del|la|el|or|to)$/i.test(w));
+  return words.length > 0 && words.length <= 5 && words.filter((w) => /^[A-Z0-9ÀÁÉÍÓÚÑ'"“(]/.test(w)).length >= Math.ceil(words.length * 0.6);
+};
 /** A food name, not a description of one ("Mixed cheese, bacon, green onions") or a discount ("Off Flatbreads"). */
 const goodFoodName = (name: string) => !/,|•|\.{2,}|~~|§/.test(name) && !/^(?:off|and|or|with|w\/|plus|add|extra|substitute|sub|up to)\b/i.test(name)
   && name.split(' ').length <= 7 && (!DATE_WORD.test(name) || FOOD_RE.test(name.replace(DATE_WORD, '')));
@@ -338,6 +352,10 @@ const NA_RE = /\b(?:athletic|non[- ]?alc\w*|alcohol[- ]free|n\/a|na beer|0\.0)\b
 const PRICE_LINE = /^(add\s+|\+\s*)?\$\s?(\d{1,3}(?:\.\d{2})?)\b\s*(.*)$/i;
 const INLINE = /^(.{2,70}?)\s*[.\-–:…·]*\s*(\+)?\$\s?(\d{1,3}(?:\.\d{2})?)\b\s*(.*)$/;
 
+/** A line with only the details of the item above it: ABV, size, or "Style | Place". */
+const DETAIL_LINE = /^(?:[\d.]+\s*%(?:\s*abv)?|\d+(?:\.\d+)?\s*(?:oz|ml|cl|l)|[^|$]{1,40}\|[^|$]{1,40})$/i;
+/** Sizes, not dishes ("Cup 5.25 / Bowl 9.00"). */
+const SIZE_NAME = /^(?:cup|bowl|bread bowl|small|medium|large|half|full|regular|side|single|double|slice|whole|pint|glass|bottle|can|pitcher)$/i;
 const cleanName = (s: string) => s.replace(/\s+[-–]\s+/g, ' ').replace(/\s+/g, ' ').replace(/[\s:,.\-–·]+$/, '').trim();
 
 /**
@@ -357,10 +375,17 @@ export function parseMenuSections(text: string): { beer: FoundPrice[]; food: Fou
   const add = (rawName: string, price: number, rest: string, addOn: boolean, desc: string, snippet: string) => {
     const name = cleanName(rawName);
     if (!name || name.split(' ').length > 9 || /[.!?]$/.test(rawName.trim()) && name.split(' ').length > 5) return;
-    const isBeerName = BEER_RE.test(name) && !FOOD_RE.test(name);
-    const kind = section === 'beer' && !FOOD_RE.test(name) ? 'beer' : section === 'food' || FOOD_RE.test(name) ? 'food' : isBeerName && section !== 'other' ? 'beer' : null;
+    // "Pizza Port Cruisin' Pale Ale" (a brewery called Pizza Port): a name ending in a beer style is a beer.
+    const endsInStyle = /\b(?:ale|ipa|lager|pilsner|pils|stout|porter|hefeweizen|saison|sour|kölsch|kolsch|amber|bock)s?$/i.test(name);
+    const isBeerName = BEER_RE.test(name) && (!FOOD_RE.test(name) || endsInStyle);
+    if (DETAIL_LINE.test(name)) return;
+    // A beer's name ("Pizza Port Cruisin' Pale Ale") is a beer wherever it's listed; food under food headings.
+    const kind = section === 'beer' && (!FOOD_RE.test(name) || endsInStyle) ? 'beer' : isBeerName && section !== 'other' ? 'beer' : section === 'food' || FOOD_RE.test(name) ? 'food' : null;
     if (!kind) return;
     if (kind === 'beer') {
+      // Under a beer heading, things that aren't beer still turn up (sodas, water, sake, tea, to-go six-packs).
+      if (NOT_BEER_ITEM.test(name) || (!BEER_RE.test(name) && name.split(' ').length > 6)) return;
+      if (/^(pints?|bottles?|cans?|drafts?)$/i.test(name) && !hhSection) return;
       if (NA_RE.test(`${name} ${rest}`) || NOT_BEER_CONTEXT.test(name) || NOT_FOOD.test(name) || price < 1.5 || price > 15 || addOn) return;
       if (/^(beers?|drafts?|draughts?|ipas?|lagers?|ales?|pilsners?|stouts?|cans?|bottles?)$/i.test(name) && !hhSection) return;
       if (!beer.some((b) => b.price === price && b.item.toLowerCase() === name.toLowerCase())) {
@@ -369,10 +394,10 @@ export function parseMenuSections(text: string): { beer: FoundPrice[]; food: Fou
       }
       return;
     }
-    if (NOT_FOOD.test(name) || price < 1 || price > 40 || !goodFoodName(name) || /^\s*off\b/i.test(rest)) return;
+    if (NOT_FOOD.test(name) || SIZE_NAME.test(name) || price < 1 || price > 40 || !goodFoodName(name) || /^\s*off\b/i.test(rest)) return;
     // On a line of its own ("Ribeye  $28") only something that names a food counts; under a food heading,
     // a name with its price on the next line ("Breakfast in America" / "$12 Craft beer $14") counts too.
-    if (!FOOD_RE.test(name) && !(section === 'food' && nameOnOwnLine)) return;
+    if (!FOOD_RE.test(name) && !(section === 'food' && nameOnOwnLine && looksLikeTitle(name))) return;
     // "MARQUEE FIREMAN ROCKY MONEY HORSE" (a list of cocktail names read off a PDF) names no dish.
     if (!FOOD_RE.test(name) && name === name.toUpperCase() && name.split(' ').length >= 4) return;
     const withBeerDeal = addOn && BEER_RE.test(desc);
@@ -392,7 +417,11 @@ export function parseMenuSections(text: string): { beer: FoundPrice[]; food: Fou
     const pl = PRICE_LINE.exec(next);
     if (!l.includes('$') && l.length <= 70 && pl) {
       nameOnOwnLine = true;
-      add(l, +pl[2], pl[3] ?? '', !!pl[1], lines[i + 2] ?? '', `${l} ${next} ${lines[i + 2] ?? ''}`.slice(0, 200));
+      // "Pliny the Elder / Double IPA | Santa Rosa, CA / 8% / $9": the name is above the ABV, size and style lines.
+      let name = l;
+      for (let k = i; k > Math.max(0, i - 3) && DETAIL_LINE.test(lines[k]); k--) name = lines[k - 1] ?? name;
+      if (DETAIL_LINE.test(name) || name.includes('$')) { i++; continue; }
+      add(name, +pl[2], pl[3] ?? '', !!pl[1], lines[i + 2] ?? '', `${name} ${next} ${lines[i + 2] ?? ''}`.slice(0, 200));
       i++;
       continue;
     }

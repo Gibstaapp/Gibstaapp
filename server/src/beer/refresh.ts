@@ -22,6 +22,8 @@ const HOME_MILES = 25;
 /** Cities we launched in, refreshed every day next to home (so they load instantly on the website). */
 /** Restaurants read per city per run, nearest the center first. */
 export const MAX_RESTAURANTS = 2500;
+/** Restaurants are read in turns: each one every RESTAURANT_DAYS days. Hand-checked ones (seed) every day. */
+export const RESTAURANT_DAYS = 4;
 
 export const LAUNCH_AREAS = [
   { name: 'Athens', lat: 37.9838, lng: 23.7275, miles: 25 },
@@ -206,7 +208,11 @@ function refreshBeerRegion(region: RegionId, forceOsm: boolean): Promise<SourceS
     // Restaurants: the nearest MAX_RESTAURANTS to the city's center get their websites read (a big city has thousands).
     const center = areas[0] ?? { lat: 0, lng: 0 };
     const rest = inUse.filter((v) => v.kind === 'restaurant').sort((x, y) => haversineMiles(center.lat, center.lng, x.lat, x.lng) - haversineMiles(center.lat, center.lng, y.lat, y.lng));
-    if (rest.length > MAX_RESTAURANTS) { const drop = new Set(rest.slice(MAX_RESTAURANTS).map((v) => v.id)); inUse = inUse.filter((v) => !drop.has(v.id)); }
+    // and a quarter of them each day (they keep their last prices in between), so the daily run stays short.
+    const day = Math.floor(Date.now() / 86400_000);
+    const hash = (id: string) => [...id].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7);
+    const skipRest = new Set(rest.filter((v, i) => i >= MAX_RESTAURANTS || (v.source === 'osm' && hash(v.id) % RESTAURANT_DAYS !== day % RESTAURANT_DAYS)).map((v) => v.id));
+    inUse = inUse.filter((v) => !skipRest.has(v.id));
     statuses.push({ source: placesSrc, ok: !osmFail, stores: inUse.length, products: 0, error: osmFail, finishedAt: at() });
 
     // 2. Hand-entered places/prices (both cities live in one file; applying it is cheap and idempotent).
@@ -232,6 +238,8 @@ async function readSites(venues: BeerVenue[], currency: 'USD' | 'EUR', source: S
     if (r.closedIds.length) beerRepo.removeVenues(r.closedIds);
     return { source, ok: true, stores: r.sitesWithInfo, products: r.prices.length + r.happyHours.length, finishedAt: at() };
   } catch (e) {
+    // Say it in the log too: the website keeps showing the last good status line, which would hide this.
+    logFn(`FAILED: ${(e as Error).stack ?? e}`);
     return { source, ok: false, stores: 0, products: 0, error: (e as Error).message, finishedAt: at() };
   }
 }

@@ -69,6 +69,18 @@
       "website": "https://chicagofiregrill.com",
       "openingHours": "Mo-Su 11:00-20:00",
       "note": "OpenStreetMap has it as a restaurant with no website; its own site (chicagofiregrill.com) lists $5 local craft beers, daily 2-5pm happy hour craft beers $3, and the food menu. Hours from the site, checked 2026-11-25."
+    },
+    {
+      "id": "osm:node/365317348",
+      "name": "Arizona Cafe",
+      "kind": "bar",
+      "lat": 32.7473087,
+      "lng": -117.250533,
+      "address": "1925 Bacon St, San Diego",
+      "website": "https://www.theazcafeob.com/",
+      "phone": "+1-619-223-7381",
+      "openingHours": "Mo-Su 12:00-02:00",
+      "note": "OpenStreetMap has the place but no website, address or hours. Website and hours from its SinglePlatform menu listing, checked 2026-11-26. Its site (homepage, contact, AZ-Menu-924.pdf) lists food only: no beer prices or happy hour."
     }
   ],
   "prices": [
