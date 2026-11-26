@@ -133,10 +133,17 @@ const weedFiles = Object.entries(WEED_FILES).map(([region, file]) => {
   return { file: file!, snap };
 });
 const home = DEFAULT_PROFILE;
+// Restaurants go in only when their own menu shows beer prices or a happy hour; food at most 10 per place.
+const allPrices = beerRepo.prices().filter((p) => p.source !== 'user');
+const allHh = beerRepo.happyHours();
+const beerInfo = new Set([...allPrices.filter((p) => p.category !== 'food').map((p) => p.venueId), ...allHh.map((h) => h.venueId)]);
+const beerVenues = beerRepo.venues().filter((v) => v.kind !== 'restaurant' || beerInfo.has(v.id));
+const kept = new Set(beerVenues.map((v) => v.id));
+const foodCount = new Map<string, number>();
 const beer: BeerSnapshot = {
-  venues: beerRepo.venues(),
-  prices: beerRepo.prices().filter((p) => p.source !== 'user'),
-  happyHours: beerRepo.happyHours(),
+  venues: beerVenues,
+  prices: allPrices.filter((p) => kept.has(p.venueId) && (p.category !== 'food' || (foodCount.set(p.venueId, (foodCount.get(p.venueId) ?? 0) + 1).get(p.venueId)! <= 10))),
+  happyHours: allHh.filter((h) => kept.has(h.venueId)),
   status: beerRepo.status(),
   area: { lat: home.lat, lng: home.lng, miles: 25 },
   // Every area whose places are in this file (home + launch cities like Athens).

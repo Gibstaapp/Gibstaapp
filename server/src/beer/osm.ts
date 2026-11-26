@@ -1,7 +1,7 @@
 import type { BeerVenue, BeerVenueKind } from '@gib/shared';
 
 /**
- * Bars, pubs, breweries and liquor stores across San Diego from OpenStreetMap (free, legal, no key).
+ * Bars, pubs, breweries, liquor stores, and restaurants with a website, from OpenStreetMap (free, legal, no key).
  * Overpass servers are busy sometimes, so we try a few mirrors.
  */
 const MIRRORS = [
@@ -24,6 +24,9 @@ const queryFor = (bbox: string) => `[out:json][timeout:120];
   nwr["craft"="brewery"](${bbox});
   nwr["microbrewery"="yes"](${bbox});
   nwr["shop"~"^(alcohol|beverages)$"](${bbox});
+  // Restaurants and grills that list a website: kept only if that site shows beer prices or a happy hour.
+  nwr["amenity"~"^(restaurant|fast_food)$"]["website"](${bbox});
+  nwr["amenity"~"^(restaurant|fast_food)$"]["contact:website"](${bbox});
 );
 out center tags;`;
 
@@ -32,14 +35,24 @@ interface OsmEl { type: string; id: number; lat?: number; lon?: number; center?:
 export function kindOf(t: Record<string, string>): BeerVenueKind {
   if (t.craft === 'brewery' || t.microbrewery === 'yes' || /brew/i.test(t.name ?? '')) return 'brewery';
   if (t.shop) return 'store';
+  if (t.amenity === 'restaurant' || t.amenity === 'fast_food') return 'restaurant';
   return 'bar';
+}
+
+/** OpenStreetMap's ways of saying a place doesn't exist anymore. */
+export function isClosed(t: Record<string, string>, today = new Date()): boolean {
+  if (t.disused || t.opening_hours === 'closed' || t.opening_hours === 'off') return true;
+  if (Object.keys(t).some((k) => /^(?:disused|was|abandoned|demolished|removed|closed|razed):/.test(k))) return true;
+  const end = /^(\d{4})(?:-(\d{2}))?(?:-(\d{2}))?/.exec(t.end_date ?? '');
+  if (end && new Date(+end[1], (+(end[2] ?? 12)) - 1, +(end[3] ?? 28)) < today) return true;
+  return /\((?:permanently )?closed\)|\bpermanently closed\b/i.test(t.name ?? '');
 }
 
 export function toVenue(e: OsmEl): BeerVenue | null {
   const t = e.tags ?? {};
   const lat = e.lat ?? e.center?.lat, lng = e.lon ?? e.center?.lon;
   if (!t.name || lat == null || lng == null) return null;
-  if (t.disused || t['disused:amenity'] || t.opening_hours === 'closed' || t.opening_hours === 'off') return null;
+  if (isClosed(t)) return null;
   const street = [t['addr:housenumber'], t['addr:street']].filter(Boolean).join(' ');
   const city = t['addr:city'];
   let website = t.website ?? t['contact:website'] ?? t.url;

@@ -20,6 +20,9 @@ const OSM_MAX_AGE_MS = 6 * 86400_000;      // places don't change often; Overpas
 const AREA_KEEP_MS = 30 * 86400_000;       // stop refreshing areas nobody has looked at in a month
 const HOME_MILES = 25;
 /** Cities we launched in, refreshed every day next to home (so they load instantly on the website). */
+/** Restaurants read per city per run, nearest the center first. */
+export const MAX_RESTAURANTS = 2500;
+
 export const LAUNCH_AREAS = [
   { name: 'Athens', lat: 37.9838, lng: 23.7275, miles: 25 },
   { name: 'New York', lat: REGIONS.nyc.center.lat, lng: REGIONS.nyc.center.lng, miles: REGIONS.nyc.center.miles },
@@ -118,6 +121,7 @@ async function crawlArea(area: BeerArea) {
   const venues = beerRepo.venues().filter((v) => inArea(area, v));
   const r = await crawlVenueSites(venues, log('web'));
   beerRepo.replaceWebsiteFor(venues.filter((v) => v.website).map((v) => v.id), r.prices, r.happyHours);
+  if (r.closedIds.length) beerRepo.removeVenues(r.closedIds);
   const areas = beerRepo.areas();
   const me = areas.find((a) => a.lat === area.lat && a.lng === area.lng);
   if (me) { me.crawledAt = at(); beerRepo.setAreas(areas); }
@@ -183,12 +187,26 @@ function refreshBeerRegion(region: RegionId, forceOsm: boolean): Promise<SourceS
     for (const a of areas) {
       if (!forceOsm && Date.now() - new Date(a.fetchedAt).getTime() < OSM_MAX_AGE_MS) continue;
       try {
-        beerRepo.upsertVenues(await fetchOsmVenues(a, log(tag)));
+        const fresh = await fetchOsmVenues(a, log(tag));
+        // Places OpenStreetMap no longer has in this area don't exist anymore (closed, demolished, removed).
+        // Not when the answer looks partial (a busy mirror can return far fewer places).
+        const ids = new Set(fresh.map((v) => v.id));
+        const before = beerRepo.venues().filter((v) => v.source === 'osm' && inArea(a, v));
+        const gone = before.filter((v) => !ids.has(v.id));
+        if (before.length && fresh.length >= before.length * 0.6 && gone.length) {
+          beerRepo.removeVenues(gone.map((v) => v.id));
+          log(tag)(`removed ${gone.length} places OpenStreetMap no longer lists (closed or gone)`);
+        }
+        beerRepo.upsertVenues(fresh);
         a.fetchedAt = at();
       } catch (e) { osmFail = (e as Error).message; }
     }
     beerRepo.setAreas([...beerRepo.areas().filter((a) => !mine(a)), ...areas]);
-    const inUse = beerRepo.venues().filter((v) => mine(v) && areas.some((a) => inArea(a, v)));
+    let inUse = beerRepo.venues().filter((v) => mine(v) && areas.some((a) => inArea(a, v)));
+    // Restaurants: the nearest MAX_RESTAURANTS to the city's center get their websites read (a big city has thousands).
+    const center = areas[0] ?? { lat: 0, lng: 0 };
+    const rest = inUse.filter((v) => v.kind === 'restaurant').sort((x, y) => haversineMiles(center.lat, center.lng, x.lat, x.lng) - haversineMiles(center.lat, center.lng, y.lat, y.lng));
+    if (rest.length > MAX_RESTAURANTS) { const drop = new Set(rest.slice(MAX_RESTAURANTS).map((v) => v.id)); inUse = inUse.filter((v) => !drop.has(v.id)); }
     statuses.push({ source: placesSrc, ok: !osmFail, stores: inUse.length, products: 0, error: osmFail, finishedAt: at() });
 
     // 2. Hand-entered places/prices (both cities live in one file; applying it is cheap and idempotent).
@@ -209,8 +227,9 @@ function refreshBeerRegion(region: RegionId, forceOsm: boolean): Promise<SourceS
 
 async function readSites(venues: BeerVenue[], currency: 'USD' | 'EUR', source: SourceStatus['source'], logFn: (m: string) => void): Promise<SourceStatus> {
   try {
-    const r = await crawlVenueSites(venues, logFn, 8, currency);
+    const r = await crawlVenueSites(venues, logFn, 12, currency);
     beerRepo.replaceWebsiteFor(r.readIds, r.prices, r.happyHours);
+    if (r.closedIds.length) beerRepo.removeVenues(r.closedIds);
     return { source, ok: true, stores: r.sitesWithInfo, products: r.prices.length + r.happyHours.length, finishedAt: at() };
   } catch (e) {
     return { source, ok: false, stores: 0, products: 0, error: (e as Error).message, finishedAt: at() };

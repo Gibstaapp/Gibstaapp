@@ -9,11 +9,14 @@ import { directionsUrl, useLocation } from '../compass/sensors.ts';
 import RefreshBar from '../components/RefreshBar.tsx';
 import { ACCENT, CardLink, Chips, EmptyState, MilesSelect, OpenBadge, OpenNowToggle, PlaceHeader, Segmented, VIEWS, cardClass, openText, pref, type PlaceView } from '../components/Place.tsx';
 
-const KINDS: readonly (readonly [BeerVenueKind | 'all', string])[] = [['all', 'All'], ['bar', '🍻 Bars'], ['brewery', '🏭 Breweries'], ['store', '🏪 Stores']];
+const KINDS: readonly (readonly [BeerVenueKind | 'all', string])[] = [['all', 'All'], ['bar', '🍻 Bars'], ['brewery', '🏭 Breweries'], ['restaurant', '🍔 Restaurants'], ['store', '🏪 Stores']];
 const SORTS: readonly (readonly [BeerSort, string])[] = [['best', 'Best'], ['cheapest', 'Cheapest'], ['closest', 'Closest']];
 const DISTANCES_MI = [1, 2, 5, 10, 20, 40], DISTANCES_KM = [1, 2, 5, 10, 20, 50];
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-const KIND_ICON: Record<BeerVenueKind, string> = { bar: '🍻', brewery: '🏭', store: '🏪' };
+const KIND_ICON: Record<BeerVenueKind, string> = { bar: '🍻', brewery: '🏭', store: '🏪', restaurant: '🍔' };
+
+/** "Burger $10", "+$2 Burger combo (with beer)", "🍺 Da Beef + craft beer $14". */
+const foodLabel = (p: BeerPrice) => `${p.withBeer && !/beer|draft|pint|lager|ipa/i.test(p.item) ? '🍺 ' : ''}${p.item} ${p.addOn ? '+' : ''}${money(p.price, p.currency)}${p.addOn && p.withBeer ? ' (with beer)' : ''}`;
 
 /** $5 / €5.50: each price keeps the currency it was posted in (San Diego data is dollars). */
 const money = (n: number, currency: BeerPrice['currency'] = 'USD') => `${CURRENCY_SYMBOL[currency ?? 'USD']}${n % 1 === 0 ? n.toFixed(0) : n.toFixed(2)}`;
@@ -63,6 +66,9 @@ function VenueCard({ r, rank, onOpen, onPointMe }: { r: RankedVenue; rank: numbe
           <p className="font-medium leading-snug">{r.best.item}{sizeLabel(r.best)}</p>
           {r.best.snippet && <p className="text-xs text-zinc-500 line-clamp-2">“{r.best.snippet}”</p>}
         </div>
+      )}
+      {r.food.length > 0 && (
+        <p className="text-xs text-zinc-300 line-clamp-2">🍔 {r.food.slice(0, 3).map(foodLabel).join(' · ')}{r.food.length > 3 ? ` · +${r.food.length - 3} more` : ''}</p>
       )}
       {r.best && (
         <div className="flex flex-wrap gap-1.5">
@@ -288,6 +294,25 @@ function VenueSheet({ r, onClose, onChanged, onCompass }: { r: RankedVenue; onCl
             ))}
           </ul>
         </section>
+
+        {r.food.length > 0 && (
+          <section>
+            <h3 className="font-semibold mb-1">Food deals</h3>
+            <ul className="space-y-1.5">
+              {r.food.map((p) => (
+                <li key={p.id} className="text-sm rounded-xl border border-zinc-800 bg-zinc-900 p-2.5">
+                  <div className="flex justify-between gap-2">
+                    <span><b className="text-amber-400">{p.addOn ? '+' : ''}{money(p.price, p.currency)}</b> {p.item}{p.withBeer ? <span className="text-amber-300"> · with beer</span> : null}</span>
+                    {sourceBadge(p)}
+                  </div>
+                  <div className="text-xs text-zinc-400 mt-0.5">{p.kind === 'happy_hour' ? 'Happy hour' : p.kind === 'special' ? 'Special' : 'Menu price'}{whenLabel(p) ? ` · ${whenLabel(p)}` : ''}</div>
+                  {p.snippet && <div className="text-xs text-zinc-500 mt-1 line-clamp-2">“{p.snippet}”</div>}
+                  {p.sourceUrl && <a href={p.sourceUrl} target="_blank" rel="noreferrer" className="text-[11px] text-zinc-500 underline">source</a>}
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
 
         {r.happyHours.length > 0 && (
           <section>

@@ -138,6 +138,15 @@ export const beerRepo = {
       for (const x of happyHours) h.run(x.venueId, x.source, JSON.stringify(x));
     });
   },
+  /** Places that don't exist anymore: the place and everything known about it. */
+  removeVenues(ids: string[]) {
+    tx(() => {
+      const dv = db.prepare('DELETE FROM beer_venues WHERE id = ?');
+      const dp = db.prepare('DELETE FROM beer_prices WHERE venue_id = ?');
+      const dh = db.prepare('DELETE FROM beer_happy_hours WHERE venue_id = ?');
+      for (const id of ids) { dv.run(id); dp.run(id); dh.run(id); }
+    });
+  },
   addPrice(p: BeerPrice) {
     db.prepare('INSERT OR REPLACE INTO beer_prices (id, venue_id, source, json) VALUES (?, ?, ?, ?)').run(p.id, p.venueId, p.source, JSON.stringify(p));
   },

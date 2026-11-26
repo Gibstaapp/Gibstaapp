@@ -76,6 +76,8 @@ function refreshWeedRegion(region: WeedRegion): Promise<RefreshStatus> {
       const log = (m: string) => console.log(`[${tag}${a.id}] ${m}`);
       try {
         const r = await withTimeout(a.fetchAll(area, log), config.sourceTimeoutMs, a.id);
+        // Stores but not a single product: every menu failed (e.g. the site blocked us). Keep yesterday's prices.
+        if (r.stores.length > 0 && r.products.length === 0) throw new Error(`listed ${r.stores.length} stores but read no menus`);
         // Only stores that are really in this city (a source can return a few from far away).
         const keep = new Set(r.stores.filter(mine).map((s) => s.id));
         results.push({ stores: r.stores.filter((s) => keep.has(s.id)), products: r.products.filter((p) => keep.has(p.storeId)), deals: r.deals.filter((d) => keep.has(d.storeId)) });
