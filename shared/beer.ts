@@ -1,6 +1,7 @@
 // ---- Beer side of the app (ported from the BeerFinder prototype) ----
 
-export type BeerVenueKind = 'bar' | 'brewery' | 'store';
+/** 'restaurant' = a restaurant or grill: shown only when its own website lists beer prices or a happy hour. */
+export type BeerVenueKind = 'bar' | 'brewery' | 'store' | 'restaurant';
 
 export interface BeerVenue {
   id: string;               // "osm:node/123" or "custom:<slug>"
@@ -37,6 +38,12 @@ export interface BeerPrice {
   snippet?: string;         // the text we found, shown as fine print
   menuDate?: string;        // when the menu itself is dated ("2024-05"), so people can judge how fresh it is
   reportedAt: string;       // ISO
+  /** 'food' = a food price or deal from the same menu (burger $10, $1 wings). Missing = beer. Food never counts as a beer price. */
+  category?: 'beer' | 'food';
+  /** Food that comes with a beer ("Da Beef + craft beer $14"). */
+  withBeer?: boolean;
+  /** An add-on price, shown as "+$2" ("Burger combo: add a craft beer + fries"). */
+  addOn?: boolean;
 }
 
 /** Happy hour window as found on a venue's website (may not list prices). */
@@ -63,7 +70,9 @@ export interface RankedVenue {
   best: (BeerPrice & { label: string }) | null;
   happyHourNow: boolean;
   happyHours: HappyHour[];
-  prices: BeerPrice[];      // everything we know, cheapest first
+  prices: BeerPrice[];      // every beer price we know, cheapest first
+  /** Food deals and prices from the same menus: happy-hour food and combos first, then cheapest. */
+  food: BeerPrice[];
   score: number;
 }
 

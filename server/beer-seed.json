@@ -58,6 +58,17 @@
       "address": "700 E 9th St, New York",
       "website": "https://www.thewaylandnyc.com",
       "openingHours": "Mo-We 16:00-02:00; Th 16:00-03:00; Fr 16:00-04:00; Sa 14:00-04:00; Su 14:00-02:00"
+    },
+    {
+      "id": "seed:chicagofiregrill",
+      "name": "Chicago Fire Grill",
+      "kind": "restaurant",
+      "lat": 32.8677581,
+      "lng": -117.2061138,
+      "address": "8935 Towne Centre Dr Ste 109, San Diego",
+      "website": "https://chicagofiregrill.com",
+      "openingHours": "Mo-Su 11:00-20:00",
+      "note": "OpenStreetMap has it as a restaurant with no website; its own site (chicagofiregrill.com) lists $5 local craft beers, daily 2-5pm happy hour craft beers $3, and the food menu. Hours from the site, checked 2026-11-25."
     }
   ],
   "prices": [

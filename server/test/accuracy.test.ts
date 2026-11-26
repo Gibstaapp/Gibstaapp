@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Store } from '@gib/shared';
 import { checkIn, earnedBadges, placeBadge, visitsToNext, type VisitLog } from '@gib/shared';
-import { extractHappyHour, parseEuroPrices, parsePrices } from '../src/beer/extract.ts';
+import { extractHappyHour, parseEuroPrices, parseFoodPrices, parseMenuSections, parsePrices } from '../src/beer/extract.ts';
 import { mergeResults, parseGrams } from '../src/normalize.ts';
 import { repairPackWeight } from '../src/sanitize.ts';
 
@@ -246,5 +246,39 @@ describe('live New York leftovers (Nov 16)', () => {
   });
   it('non-alcoholic named before the brand, or marked 0.0% after the price', () => {
     expect(items('eaux, France • 2014 Non-Alcoholic Bitburger Drive Pilsner $9 0.0% ABV Athletic Brewing Run Wild IPA $9 Less than 0.05% ABV')).toEqual([]);
+  });
+});
+
+describe('restaurants and food deals (Chicago Fire Grill, Nov 2026)', () => {
+  // The menu as their GoDaddy site lays it out: name on one line, price on the next.
+  const menu = [
+    'Burgers', 'Breakfast in America', '$12 Craft beer $14', 'Need we say more! 1/2 lb Prime beef',
+    'The Big Shoulders', '$10 w Craft beer/soda', 'Our classic Cheeseburger', 'Add blue cheese & mushrooms $2',
+    'Burger Combo Deal', 'Add $2', 'Choose your burger Choose your Local Craft beer includes Hand Cut fries',
+    'Hot Dogs', 'Chicago dog', '$9 Craft beer $11',
+    'Local Craft Beer', 'Grab a pint of one of our Local craft beers',
+    'Stone - Delicious IPA', '$5', "One of Stone's best IPA's 7.7%", 'Stone - Smoked Porter', '$5', '5.9%',
+    'Alesmith - Lil Devil', '$5', 'Belgian style Pale Ale 5.7%',
+    'Soft Drinks', 'Soda & Iced Tea', '$2/$2.50',
+  ].join('\n');
+  const { beer, food } = parseMenuSections(menu);
+  it('beers under the beer heading, brewery names kept', () => {
+    expect(beer.map((b) => `${b.item}|${b.price}`)).toEqual(['Stone Delicious IPA|5', 'Stone Smoked Porter|5', 'Alesmith Lil Devil|5']);
+  });
+  it('food with its with-a-beer price, and the +$2 beer combo', () => {
+    const f = food.map((x) => `${x.item}|${x.price}${x.withBeer ? '|beer' : ''}${x.addOn ? '|add' : ''}`);
+    expect(f).toEqual(expect.arrayContaining(['Breakfast in America|12', 'Breakfast in America + craft beer|14|beer', 'The Big Shoulders|10|beer', 'Burger Combo Deal|2|beer|add', 'Chicago dog|9', 'Chicago dog + craft beer|11|beer']));
+    expect(f.some((x) => /blue cheese|soda/i.test(x))).toBe(false);
+  });
+  it('"$12 Craft beer $14" is never a $14 beer', () => {
+    expect(parsePrices('Da Beef $12 Craft beer $14 Our Homemade Italian Beef', false)).toEqual([]);
+  });
+  it('event, parking, discount and date lines are not food deals', () => {
+    const t = ['Private Events', 'Up to 30 Guests $2', 'Horton Plaza Parking Lot (4th & F St entrance) $12', 'Thursday November 26th $2 off Flatbreads', 'Mixed cheese, bacon, green onions $10.95', 'Wings $9'].join('\n');
+    expect(parseMenuSections(t).food.map((x) => x.item)).toEqual(['Wings']);
+    expect(parseFoodPrices('Happy Hour $2 off Flatbreads | $7 Titos | $4 Tallboys | $1 wings', true).map((x) => `${x.item}|${x.price}`)).toEqual(['Wings|1']);
+  });
+  it('hard seltzers and ciders are not beer', () => {
+    expect(parseMenuSections('Beer\nWhite Claw $7\nTopo Chico $7\nAngry Orchard $7\nModelo $7').beer.map((b) => b.item)).toEqual(['Modelo']);
   });
 });

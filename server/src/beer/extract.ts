@@ -7,6 +7,8 @@
 
 export interface FoundWindow { days: number[]; start: string; end: string; text: string }
 export interface FoundPrice { item: string; price: number; size?: string; happyHour: boolean; text: string }
+/** A food price or deal. withBeer = comes with a beer ("Da Beef + craft beer $14"); addOn = "+$2" on top of something. */
+export interface FoundFood { item: string; price: number; happyHour: boolean; text: string; withBeer?: boolean; addOn?: boolean }
 
 const DAY_NAMES: [RegExp, number][] = [
   [/^sun/i, 0], [/^mon/i, 1], [/^tue/i, 2], [/^wed/i, 3], [/^thu/i, 4], [/^fri/i, 5], [/^sat/i, 6],
@@ -67,9 +69,9 @@ export function parseTimeRange(text: string): { start: string; end: string } | n
   return { start, end };
 }
 
-const BEER_WORD = String.raw`(?:drafts?|draughts?|pints?|beers?|brews?|taps?|domestics?|crafts?|tall ?boys?|lagers?|ipas?|pilsners?|bottles?|cans?|mich(?:elob)?(?: ultra)?|coors(?: light)?|bud(?: light)?|modelo|pacifico|tecate|corona|stella|blue moon|pbr|miller(?: lite| high life)?|house beers?)`;
+const BEER_WORD = String.raw`(?:drafts?|draughts?|pints?|beers?|brews?|taps?|domestics?|crafts?|tall ?boys?|lagers?|ipas?|pilsners?|ales?|porters?|stouts?|bottles?|cans?|mich(?:elob)?(?: ultra)?|coors(?: light)?|bud(?: light)?|modelo|pacifico|tecate|corona|stella|blue moon|pbr|miller(?: lite| high life)?|house beers?)`;
 // Not beer, or not a single beer: wine/soda/food/etc. near the price.
-const NOT_BEER_CONTEXT = /\b(wine|glass|soda|juice|coke|sprite|lemonade|iced tea|coffee|kombucha|root beer|ginger beer|ice cream|float|soaked|battered|fried|cheese|sauce|bratwurst|upgrade|cocktails?|highballs?|spritz|champagne|mimosas?|all you can|spaghetti|pinot|cabernet|chardonnay|sauvignon|merlot|ros[eé]|prosecco|seltzers?|aperol|campari|vodka|mezcal|bitters)\b/i;
+const NOT_BEER_CONTEXT = /\b(wine|glass|soda|juice|coke|sprite|lemonade|iced tea|coffee|kombucha|root beer|ginger beer|ginger ale|ice cream|float|soaked|battered|fried|cheese|sauce|bratwurst|upgrade|cocktails?|highballs?|spritz|champagne|mimosas?|all you can|spaghetti|pinot|cabernet|chardonnay|sauvignon|merlot|ros[eé]|prosecco|seltzers?|aperol|campari|vodka|mezcal|bitters|white claw|topo chico|high noon|truly|twisted tea|ciders?|angry orchard|kombucha|sake|soju|nutrl|cutwater)\b/i;
 const SKIP_WORD = /pitcher|bucket|tower|growler|keg|flight|off\b|wings?|tacos?|food|wine|wells?|cocktail|margarita|mimosa|champagne|shot|sliders?|fries|burger|pizza|appetizer/i;
 
 /** What comes right before the first price of a price-first list: a time, a heading, "only", a day... */
@@ -99,6 +101,11 @@ export function parsePrices(text: string, happyHour: boolean): FoundPrice[] {
     // Text right after the price (name-then-price) or right after the name ("$5 drafts"-style).
     const after0 = end >= 0 ? end : text.indexOf(item, at) + item.length;
     const tail = text.slice(after0, after0 + 30);
+    // "Da Beef $12 Craft beer $14": food, then the same food with a craft beer. $14 is not the price of a beer.
+    if (end >= 0 && /^(?:local |house )?(?:craft )?(?:beers?|drafts?|pints?)$/i.test(item.trim())) {
+      const pre = /\$\s?(\d{1,2}(?:\.\d{2})?)\s*(?:w\/?|with)?\s*$/i.exec(text.slice(Math.max(0, at - 14), at));
+      if (pre && +pre[1] < price) return;
+    }
     // "$5 Boot Brew – any draft $7 & under": $7 is the limit, not a price.
     if (end >= 0 && /^\s*(?:&|and|or)\s*(?:under|less|below)\b/i.test(tail)) return;
     // "$8 can of Modelo and a shot of tequila", "$10 beer, shot & 6 wings": a combo, not the price of a beer.
@@ -144,6 +151,7 @@ export function parsePrices(text: string, happyHour: boolean): FoundPrice[] {
       const brand: string[] = [];
       while (brand.length < 3 && words.length) {
         const w = words.pop()!;
+        if (w === '-' || w === '–') continue; // "Stone - Delicious IPA": the dash only separates brewery and beer
         // Not brand words: headings, "TO ANY", "ABV", and state/country codes from the line before ("Coney Island, NY").
         if (!/^[A-Z][\w'’.&-]*$/.test(w) || /^[A-Z]{2}$/.test(w) || /^(beers?|drafts?|draughts?|bottles?|cans?|on|tap|menu|happy|hour|wines?|cocktails?|and|the|our|all|select|to|any|add|per|of|for|abv|ibu|ask|bartender|server|BEERS?|DRAFTS?)$/i.test(w)) break;
         brand.unshift(w);
@@ -190,10 +198,11 @@ const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 const squish = (s: string) => s.replace(/\s+/g, ' ').trim();
 
 /** Find happy-hour windows (and the beer prices near them) in a page's text. */
-export function extractHappyHour(pageText: string): { windows: FoundWindow[]; prices: FoundPrice[] } {
+export function extractHappyHour(pageText: string): { windows: FoundWindow[]; prices: FoundPrice[]; food: FoundFood[] } {
   const text = squish(pageText);
   const windows: FoundWindow[] = [];
   const prices: FoundPrice[] = [];
+  const food: FoundFood[] = [];
   const re = /happy\s*hour|reverse\s*happy|social\s*hour|half\s*off\s*drafts/gi;
   for (const m of text.matchAll(re)) {
     const at = m.index ?? 0;
@@ -211,8 +220,11 @@ export function extractHappyHour(pageText: string): { windows: FoundWindow[]; pr
     for (const p of parsePrices(text.slice(at, at + 400), true)) {
       if (!prices.some((x) => x.price === p.price && x.item === p.item)) prices.push(p);
     }
+    for (const f of parseFoodPrices(text.slice(at, at + 400), true)) {
+      if (!food.some((x) => x.price === f.price && x.item.toLowerCase() === f.item.toLowerCase())) food.push(f);
+    }
   }
-  return { windows: windows.slice(0, 4), prices: prices.slice(0, 8) };
+  return { windows: windows.slice(0, 4), prices: prices.slice(0, 8), food: food.slice(0, 8) };
 }
 
 /** HTML -> visible text (good enough: no scripts/styles, tags to spaces, entities decoded). */
@@ -223,7 +235,9 @@ export function htmlToText(html: string): string {
     .replace(/<[^>]+>/g, ' ')
     .replace(/&nbsp;|&#160;/g, ' ')
     .replace(/&amp;/g, '&').replace(/&#36;|&dollar;/g, '$').replace(/&ndash;|&#8211;/g, '–').replace(/&mdash;|&#8212;/g, '—')
-    .replace(/&#39;|&rsquo;|&#8217;/g, "'").replace(/&quot;|&ldquo;|&rdquo;/g, '"')
+    .replace(/&#39;|&apos;|&rsquo;|&#8217;/g, "'").replace(/&quot;|&ldquo;|&rdquo;/g, '"')
+    // Any other numeric character code ("Cali&#x27; Creamin&#x27;", "Caf&#233;").
+    .replace(/&#x([0-9a-f]{1,6});/gi, (_, h) => String.fromCodePoint(parseInt(h, 16))).replace(/&#(\d{1,7});/g, (_, d) => String.fromCodePoint(+d))
     .replace(/[ \t]+/g, ' ');
 }
 
@@ -300,4 +314,120 @@ export function extractEuroHappyHour(pageText: string): { windows: FoundWindow[]
     for (const p of parseEuroPrices(text.slice(at, at + 400), true)) if (!prices.some((x) => x.price === p.price && x.item === p.item)) prices.push(p);
   }
   return { windows, prices: prices.slice(0, 8) };
+}
+
+
+// ---------------- food, and menus laid out in sections ----------------
+
+const FOOD_WORD = String.raw`(?:(?:cheese)?burgers?|hot ?dogs?|dogs?|brats?|bratwursts?|sausages?|tacos?|wings?|pizzas?|slices?|nachos|fries|tots|sliders?|sandwich(?:es)?|subs?|gyros?|quesadillas?|burritos?|pretzels?|tenders|nuggets|wraps?|flatbreads?|appetizers?|apps|bites|salads?|soups?|pastas?|ribs|platters?|entr[eé]es?|plates?|bowls?|chili|steaks?|chicken|fish (?:and|&) chips|poke|ramen|dumplings?|empanadas?|calamari|mozzarella sticks|mac (?:and|&) cheese|grilled cheese|hummus|quesabirria|birria|elote|oysters?|clams?|mussels?|shrimp|ceviche|crudo|meatballs?)`;
+const FOOD_RE = new RegExp(String.raw`\b${FOOD_WORD}\b`, 'i');
+const BEER_RE = new RegExp(String.raw`\b${BEER_WORD}\b`, 'i');
+/** Things on a menu that are neither beer nor food deals. */
+const NOT_FOOD = /\b(?:soda|sodas|soft drinks?|iced tea|tea|coffee|espresso|latte|juice|lemonade|water|pellegrino|wine|ros[eé]|brut|champagne|magnum|btl|bottle service|cocktails?|margaritas?|mimosas?|martinis?|mules?|spritz|sangria|shots?|whiskey|whisky|bourbon|vodka|tequila|mezcal|gin|rum|liquor|spirits|titos|seltzers?|kombucha|drinks?|gift cards?|catering|party tray|delivery fee|tip|tax|guests?|people|persons?|parking|tickets?|admission|trivia|karaoke|bingo|happy hour|dining for|plates, silverware|silverware)\b/i;
+/** Dates and weekdays ("Thursday November 26th $2"): a calendar line, not a dish (unless it names one: "Taco Tuesday"). */
+const DATE_WORD = /\b(?:mon|tues|wednes|thurs|fri|satur|sun)days?\b|\b(?:january|february|march|april|may|june|july|august|september|october|november|december)\b|\b\d{1,2}(?:st|nd|rd|th)\b/i;
+/** "2 Tacos + Mexican Lager", "Burger & a beer": food that comes with a beer (not "Beer Battered Fish", "Beer cheese"). */
+const comesWithBeer = (name: string) => BEER_RE.test(name.replace(/\bbeer[- ]?(?:battered|braised|cheese|brat|bread|mustard|can chicken)\b/gi, ''));
+/** A food name, not a description of one ("Mixed cheese, bacon, green onions") or a discount ("Off Flatbreads"). */
+const goodFoodName = (name: string) => !/,|•|\.{2,}|~~|§/.test(name) && !/^(?:off|and|or|with|w\/|plus|add|extra|substitute|sub|up to)\b/i.test(name)
+  && name.split(' ').length <= 7 && (!DATE_WORD.test(name) || FOOD_RE.test(name.replace(DATE_WORD, '')));
+const BEER_HEAD = /\b(?:beers?|brews|drafts?|draughts?|on tap|taps|bottles? (?:&|and) cans|cans (?:&|and) bottles|ipas|lagers|ales)\b/i;
+const FOOD_HEAD = new RegExp(String.raw`\b(?:${FOOD_WORD}|food|kitchen|eats|mains|sides|starters|small plates|shareables|snacks|lunch|dinner|brunch|breakfast|combos?|specials|beef (?:&|and) sausage|soup (?:&|and) salad)\b`, 'i');
+const OTHER_HEAD = /\b(?:soft drinks|non[- ]?alcoholic|beverages|drinks|sodas?|coffee|tea|wines?|cocktails?|spirits|whiske?ys?|liquor|desserts?|sweets|contact|hours|about|location|events|catering|gift cards?)\b/i;
+const NA_RE = /\b(?:athletic|non[- ]?alc\w*|alcohol[- ]free|n\/a|na beer|0\.0)\b/i;
+const PRICE_LINE = /^(add\s+|\+\s*)?\$\s?(\d{1,3}(?:\.\d{2})?)\b\s*(.*)$/i;
+const INLINE = /^(.{2,70}?)\s*[.\-–:…·]*\s*(\+)?\$\s?(\d{1,3}(?:\.\d{2})?)\b\s*(.*)$/;
+
+const cleanName = (s: string) => s.replace(/\s+[-–]\s+/g, ' ').replace(/\s+/g, ' ').replace(/[\s:,.\-–·]+$/, '').trim();
+
+/**
+ * Menus laid out in sections, one item per line with the price on the same line or the next:
+ *   Local Craft Beer            Burgers                       Burger Combo Deal
+ *   Stone - Delicious IPA       The Big Shoulders             Add $2
+ *   $5                          $10 w Craft beer/soda         Choose your Local Craft beer includes Hand Cut fries
+ * Under a beer heading every item is a beer (even "AleSmith - Lil Devil"); under a food heading every item is food.
+ * Prices next to a "Craft beer" price ("$12 Craft beer $14") give the same food with a beer.
+ */
+export function parseMenuSections(text: string): { beer: FoundPrice[]; food: FoundFood[] } {
+  const lines = text.split(/\n/).map((l) => l.replace(/\s+/g, ' ').trim()).filter(Boolean);
+  const beer: FoundPrice[] = [], food: FoundFood[] = [];
+  let section: 'beer' | 'food' | 'other' | null = null;
+  let hhSection = false;
+  let nameOnOwnLine = false;
+  const add = (rawName: string, price: number, rest: string, addOn: boolean, desc: string, snippet: string) => {
+    const name = cleanName(rawName);
+    if (!name || name.split(' ').length > 9 || /[.!?]$/.test(rawName.trim()) && name.split(' ').length > 5) return;
+    const isBeerName = BEER_RE.test(name) && !FOOD_RE.test(name);
+    const kind = section === 'beer' && !FOOD_RE.test(name) ? 'beer' : section === 'food' || FOOD_RE.test(name) ? 'food' : isBeerName && section !== 'other' ? 'beer' : null;
+    if (!kind) return;
+    if (kind === 'beer') {
+      if (NA_RE.test(`${name} ${rest}`) || NOT_BEER_CONTEXT.test(name) || NOT_FOOD.test(name) || price < 1.5 || price > 15 || addOn) return;
+      if (/^(beers?|drafts?|draughts?|ipas?|lagers?|ales?|pilsners?|stouts?|cans?|bottles?)$/i.test(name) && !hhSection) return;
+      if (!beer.some((b) => b.price === price && b.item.toLowerCase() === name.toLowerCase())) {
+        const size = /pint/i.test(name) ? 'pint' : /tall ?boy/i.test(name) ? '24oz' : /\b(can|bottle)s?\b/i.test(name) ? '12oz' : undefined;
+        beer.push({ item: cap(name), price, size, happyHour: hhSection, text: snippet });
+      }
+      return;
+    }
+    if (NOT_FOOD.test(name) || price < 1 || price > 40 || !goodFoodName(name) || /^\s*off\b/i.test(rest)) return;
+    // On a line of its own ("Ribeye  $28") only something that names a food counts; under a food heading,
+    // a name with its price on the next line ("Breakfast in America" / "$12 Craft beer $14") counts too.
+    if (!FOOD_RE.test(name) && !(section === 'food' && nameOnOwnLine)) return;
+    // "MARQUEE FIREMAN ROCKY MONEY HORSE" (a list of cocktail names read off a PDF) names no dish.
+    if (!FOOD_RE.test(name) && name === name.toUpperCase() && name.split(' ').length >= 4) return;
+    const withBeerDeal = addOn && BEER_RE.test(desc);
+    // Add-ons ("Add bacon $2") are only worth showing when they add a beer ("Burger combo: add $2 for a craft beer + fries").
+    if (addOn && !withBeerDeal) return;
+    if (!food.some((f) => f.price === price && f.item.toLowerCase() === name.toLowerCase())) {
+      food.push({ item: cap(name), price, happyHour: hhSection, text: snippet, ...(addOn ? { addOn: true } : {}), ...(withBeerDeal || comesWithBeer(name) ? { withBeer: true } : {}) });
+    }
+    // "$12 Craft beer $14": the same food with a craft beer.
+    const combo = /\b((?:local |house )?(?:craft )?(?:beer|draft|pint))\s*\$\s?(\d{1,3}(?:\.\d{2})?)/i.exec(rest);
+    if (combo && +combo[2] > price) food.push({ item: `${cap(name)} + ${combo[1].toLowerCase()}`, price: +combo[2], happyHour: hhSection, text: snippet, withBeer: true });
+    else if (/^w\/?\s+(?:a\s+)?(?:local\s+)?(?:craft\s+)?(?:beer|draft|pint)/i.test(rest)) food[food.length - 1].withBeer = true;
+  };
+  for (let i = 0; i < lines.length; i++) {
+    const l = lines[i];
+    const next = lines[i + 1] ?? '';
+    const pl = PRICE_LINE.exec(next);
+    if (!l.includes('$') && l.length <= 70 && pl) {
+      nameOnOwnLine = true;
+      add(l, +pl[2], pl[3] ?? '', !!pl[1], lines[i + 2] ?? '', `${l} ${next} ${lines[i + 2] ?? ''}`.slice(0, 200));
+      i++;
+      continue;
+    }
+    const m = INLINE.exec(l);
+    if (m && !/^\$/.test(l)) { nameOnOwnLine = false; add(m[1], +m[3], m[4] ?? '', !!m[2] || /^add\b/i.test(m[1]), next, `${l} ${next}`.slice(0, 200)); continue; }
+    if (!l.includes('$') && l.length <= 40 && l.split(' ').length <= 6 && !/[.!?]$/.test(l)) {
+      hhSection = /happy\s*hour/i.test(l);
+      section = BEER_HEAD.test(l) && !/root beer|non[- ]?alc/i.test(l) ? 'beer' : OTHER_HEAD.test(l) ? 'other' : FOOD_HEAD.test(l) ? 'food' : hhSection ? section : section;
+    }
+  }
+  return { beer, food };
+}
+
+/**
+ * Food prices in running text, mostly happy-hour and specials blurbs: "$1 wings", "$5 street tacos",
+ * "Smash Burger $9". Never "$2 off burgers" (a discount, not a price).
+ */
+export function parseFoodPrices(text: string, happyHour: boolean): FoundFood[] {
+  const out: FoundFood[] = [];
+  const t = squish(text);
+  const push = (price: number, rawItem: string, at: number, end: number) => {
+    const item = cleanName(rawItem);
+    if (!item || price < 0.5 || price > 30 || NOT_FOOD.test(item) || !goodFoodName(item)) return;
+    if (/^\s*off\b/i.test(t.slice(end, end + 6)) || /\boff\s*$/i.test(t.slice(Math.max(0, at - 6), at))) return;
+    if (/^(apps|appetizers?|bites|food|plates?|entr[eé]es?)$/i.test(item) && !happyHour) return;
+    if (out.some((o) => o.price === price && o.item.toLowerCase() === item.toLowerCase())) return;
+    out.push({ item: cap(item), price, happyHour, text: t.slice(Math.max(0, at - 50), end + 60), ...(comesWithBeer(item) ? { withBeer: true } : {}) });
+  };
+  const before = new RegExp(String.raw`\$\s?(\d{1,2}(?:\.\d{2})?)\s+((?:[a-z]+ ){0,3}?${FOOD_WORD})\b(?!\s*off)`, 'gi');
+  const after = new RegExp(String.raw`\b((?:[A-Z][\w'’&-]* ){0,3}${FOOD_WORD}(?: [a-z]+){0,2}?)\s*[:\-–]?\s*\$\s?(\d{1,2}(?:\.\d{2})?)`, 'gi');
+  if (happyHour) for (const m of t.matchAll(before)) push(+m[1], m[2], m.index ?? 0, (m.index ?? 0) + m[0].length);
+  for (const m of t.matchAll(after)) {
+    // In a price-first list the price after a name is the next item's ("$5 tacos $6 nachos").
+    if (happyHour && /\$\s?\d/.test(t.slice(Math.max(0, (m.index ?? 0) - 8), m.index ?? 0))) continue;
+    push(+m[2], m[1], m.index ?? 0, (m.index ?? 0) + m[0].length);
+  }
+  return out;
 }

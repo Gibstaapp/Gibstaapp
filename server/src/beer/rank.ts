@@ -45,6 +45,16 @@ export function priceAppliesNow(p: BeerPrice, now: Date): boolean {
 
 const LABEL: Record<BeerPrice['kind'], string> = { regular: 'Regular price', happy_hour: 'Happy hour', special: 'Daily special' };
 
+/** A place's food deals: what applies now and happy-hour / beer-combo deals first, then cheapest; at most 12. */
+export function foodList(ps: BeerPrice[], now: Date): BeerPrice[] {
+  const seen = new Set<string>();
+  const rank = (p: BeerPrice) => (priceAppliesNow(p, now) ? 0 : 4) + (p.kind !== 'regular' ? 0 : 2) + (p.withBeer || p.addOn ? 0 : 1);
+  return ps
+    .filter((p) => { const k = `${p.item.toLowerCase()}|${p.price}`; return !seen.has(k) && !!seen.add(k); })
+    .sort((a, b) => rank(a) - rank(b) || a.price - b.price)
+    .slice(0, 12);
+}
+
 export function rankVenues(
   q: BeerQuery,
   venues: BeerVenue[],
@@ -71,8 +81,13 @@ export function rankVenues(
 
     // Prices must be in the place's own currency (Athens = euros): a '$' read off a Greek website is dropped.
     const currency = regionAt(v).currency;
-    const vp = dedupePrices((byVenue.get(v.id) ?? []).filter((p) => (p.currency ?? 'USD') === currency)).sort((a, b) => perPint(a) - perPint(b));
+    const mine = (byVenue.get(v.id) ?? []).filter((p) => (p.currency ?? 'USD') === currency);
+    // Food never counts as a beer price.
+    const vp = dedupePrices(mine.filter((p) => p.category !== 'food')).sort((a, b) => perPint(a) - perPint(b));
     const hh = hhByVenue.get(v.id) ?? [];
+    // Restaurants are only beer places when their own menu shows beer prices or a happy hour.
+    if (v.kind === 'restaurant' && !vp.length && !hh.length) continue;
+    const food = foodList(mine.filter((p) => p.category === 'food'), localNow);
     const applicable = vp.filter((p) => priceAppliesNow(p, localNow));
     const best = applicable[0] ? { ...applicable[0], label: LABEL[applicable[0].kind] } : null;
     if (q.pricedOnly && !best) continue;
@@ -87,6 +102,7 @@ export function rankVenues(
       happyHourNow: hh.some((h) => windowActive(h, localNow)) || applicable.some((p) => p.kind === 'happy_hour'),
       happyHours: hh,
       prices: vp,
+      food,
       score: 0,
     });
   }
