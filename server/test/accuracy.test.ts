@@ -3,6 +3,7 @@ import type { Store } from '@gib/shared';
 import { checkIn, earnedBadges, placeBadge, visitsToNext, type VisitLog } from '@gib/shared';
 import { extractHappyHour, parseEuroPrices, parseFoodPrices, parseMenuSections, parsePrices } from '../src/beer/extract.ts';
 import { mergeResults, parseGrams } from '../src/normalize.ts';
+import { siteLinks } from '../src/beer/websites.ts';
 import { repairPackWeight } from '../src/sanitize.ts';
 
 // Real snippets from bar websites that used to produce wrong "beer prices".
@@ -280,5 +281,37 @@ describe('restaurants and food deals (Chicago Fire Grill, Nov 2026)', () => {
   });
   it('hard seltzers and ciders are not beer', () => {
     expect(parseMenuSections('Beer\nWhite Claw $7\nTopo Chico $7\nAngry Orchard $7\nModelo $7').beer.map((b) => b.item)).toEqual(['Modelo']);
+  });
+});
+
+describe('crawler never stops on one odd site', () => {
+  it('broken "%" codes and malformed addresses give no links instead of throwing', () => {
+    expect(siteLinks('<a href="/menu%E0%A4%A">Menu</a><a href="/happy-hour">Happy Hour</a>', 'https://a.com/')).toEqual(['https://a.com/happy-hour', 'https://a.com/menu%E0%A4%A']);
+    expect(siteLinks('<a href="/menu">Menu</a>', 'www.bad url.com')).toEqual([]);
+  });
+});
+
+describe('Ocean Beach and University City checks (Nov 26)', () => {
+  it("Wonderland: a happy-hour block's $5 drafts are never the everyday price", () => {
+    const t = 'Happy Hour Monday-Friday 3PM-5PM | $5 Drafts, $8 House Wine, $11 Select Cocktails & Food Specials Specials subject to change. Monday through Friday | 3PM-5PM | Not valid on takeout orders, holidays or special events Drinks Drafts $ 5.00 House Wine Glass $ 8.00';
+    expect(parsePrices(t, false)).toEqual([]);
+    expect(extractHappyHour(t).prices.map((p) => `${p.item}|${p.price}`)).toContain('Drafts|5');
+  });
+  it('restaurant drinks under a beer heading are not beers', () => {
+    const t = 'Beer & Sake\nKingfisher\n$8\nPepsi\n$3\nNama\n$7\nRegular Water Bottle\n$1.99\nSix Pack Cans To Go\n$6\nPint\n$9.95';
+    expect(parseMenuSections(t).beer.map((b) => `${b.item}|${b.price}`)).toEqual(['Kingfisher|8']);
+  });
+  it('descriptions are not dish names', () => {
+    const t = 'Entrees\nTikka Masala\n$18\nCreamy tomato curry with spices\n$18\nWeekend brunch favorite\n$5';
+    expect(parseMenuSections(t).food.map((f) => f.item)).toEqual(['Tikka Masala']);
+  });
+});
+
+describe('Wonderland draft list layout (name / style | place / ABV / price)', () => {
+  it('names come from above the detail lines; a brewery called Pizza Port is still beer', () => {
+    const t = ['Drafts', 'Latitude 33 Blonde Ale', 'Blonde Ale | Vista, CA', '5%', '$ 9.00', "Pizza Port Cruisin' Pale Ale", 'Pale Ale | Carlsbad, CA', '5.2%', '$ 9.00', 'Food', 'Onion Rings', '$ 10.00', 'Soup', 'Cup', '$ 5.25', 'Bowl', '$ 9.00'].join('\n');
+    const r = parseMenuSections(t);
+    expect(r.beer.map((b) => `${b.item}|${b.price}`)).toEqual(['Latitude 33 Blonde Ale|9', "Pizza Port Cruisin' Pale Ale|9"]);
+    expect(r.food.map((f) => `${f.item}|${f.price}`)).toEqual(['Onion Rings|10']);
   });
 });

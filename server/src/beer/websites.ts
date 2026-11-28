@@ -1,5 +1,5 @@
 import type { BeerPrice, BeerVenue, HappyHour } from '@gib/shared';
-import { extractEuroHappyHour, extractHappyHour, htmlToText, parseEuroPrices, parseMenuSections, parsePrices, type FoundFood } from './extract.ts';
+import { extractEuroHappyHour, extractHappyHour, htmlToText, parseDays, parseEuroPrices, parseMenuSections, parsePrices, type FoundFood } from './extract.ts';
 import { MAX_PDF_BYTES, OcrSession, pdfLinks, pdfToText } from './pdf.ts';
 
 /**
@@ -40,11 +40,15 @@ async function getPdf(url: string, attempt = 1): Promise<Uint8Array | null> {
 /** Pages that never hold prices. */
 const SKIP_PAGE = /privacy|terms|cookie|career|jobs|employ|login|sign-?in|account|cart|checkout|gift|wp-(?:admin|json|content)|\/feed|\/tag\/|\/category\/|\/author\/|\/blog\/.|\/news\/.|press|reserv|booking|\/book\b|donat|accessib|sitemap|\/shop\/|\/product\/|careers/i;
 
+/** decodeURIComponent that never throws on a broken "%" code ("/menu%E0%A4%A"). */
+const safeDecode = (s: string) => { try { return decodeURIComponent(s); } catch { return s; } };
+
 /** Every page of the site's own menu bar, best first: happy hour, specials / deals, menus, then the rest ("every tab"). */
 export function siteLinks(html: string, base: string, max = MAX_PAGES - 1): string[] {
   const out: { url: string; score: number }[] = [];
-  const host = new URL(base).host.replace(/^www\./, '');
-  const baseUrl = new URL(base);
+  let baseUrl: URL;
+  try { baseUrl = new URL(base); } catch { return []; } // a malformed website address on the map
+  const host = baseUrl.host.replace(/^www\./, '');
   for (const m of html.matchAll(/<a\b[^>]*href=["']([^"'#][^"']*)["'][^>]*>([\s\S]{0,200}?)<\/a>/gi)) {
     const label = m[2].replace(/<[^>]+>/g, ' ');
     const href = m[1];
@@ -54,7 +58,7 @@ export function siteLinks(html: string, base: string, max = MAX_PAGES - 1): stri
     url.hash = '';
     if (url.host.replace(/^www\./, '') !== host || url.pathname === baseUrl.pathname && url.search === baseUrl.search) continue;
     if (SKIP_PAGE.test(url.pathname) || url.pathname.split('/').filter(Boolean).length > 3) continue;
-    const both = `${decodeURIComponent(url.pathname)} ${label}`;
+    const both = `${safeDecode(url.pathname)} ${label}`;
     const score = /happy/i.test(both) ? 5 : /special|deal|promo|daily|weekly/i.test(both) ? 4 : LINK_HINT.test(both) || /food|eat|lunch|dinner|brunch|kitchen/i.test(both) ? 3 : 1;
     if (!out.some((o) => o.url === url.href)) out.push({ url: url.href, score });
   }
@@ -62,7 +66,7 @@ export function siteLinks(html: string, base: string, max = MAX_PAGES - 1): stri
 }
 
 /** A page that came back nearly empty although the HTML is big: it's built by JavaScript in the browser. */
-export const builtByScript = (html: string, text: string) => text.replace(/\s+/g, ' ').length < 1500 && html.length > 20_000;
+export const builtByScript = (html: string, text: string) => text.replace(/\s+/g, ' ').length < 400 && html.length > 20_000;
 
 /**
  * Opens JavaScript-built sites in a real browser (Playwright), scrolls so lazy sections load, and returns the page's
@@ -122,7 +126,7 @@ export interface CrawlOptions {
   pdfs?: boolean;
   /** OCR budget for PDFs that are only pictures (pages per run; 0 = no OCR). Default 30. */
   ocrPages?: number;
-  /** Pages of JavaScript-built sites to open in a real browser per run (0 = never). Default 150. */
+  /** Pages of JavaScript-built sites to open in a real browser per run (0 = never). Default 40. */
   renderPages?: number;
 }
 
@@ -130,8 +134,8 @@ export async function crawlVenueSites(venues: BeerVenue[], log: (m: string) => v
   const eur = currency === 'EUR';
   const readPdfs = opts.pdfs ?? true;
   const ocr = readPdfs && (opts.ocrPages ?? 30) > 0 ? new OcrSession(eur ? 'eng+ell' : 'eng', opts.ocrPages ?? 30) : null;
-  const renderer = new Renderer(opts.renderPages ?? 150);
-  let pdfsRead = 0, pdfsOcr = 0, rendered = 0, pagesRead = 0, foodFound = 0;
+  const renderer = new Renderer(opts.renderPages ?? 40);
+  let pdfsRead = 0, pdfsOcr = 0, rendered = 0, pagesRead = 0, foodFound = 0, failedSites = 0;
   const hhOf = eur ? extractEuroHappyHour : extractHappyHour;
   const menuPrices = (text: string) => (eur ? parseEuroPrices(text, false) : parsePrices(text, false));
   const tag = eur ? { currency: 'EUR' as const } : {};
@@ -148,31 +152,37 @@ export async function crawlVenueSites(venues: BeerVenue[], log: (m: string) => v
   async function worker() {
     while (i < targets.length) {
       const v = targets[i++];
+      // One odd site (broken address, strange page) is skipped; it never stops the whole crawl.
+      try {
       let home = await get(v.website!);
       // Sites built in the browser by JavaScript (GoDaddy, Wix...): open the homepage in a real browser.
       let renderedHome: { html: string; text: string } | null = null;
+      // (A site that doesn't answer at all isn't opened in the browser: it's down, and would only cost time.)
       if (home && builtByScript(home, htmlToText(home))) renderedHome = await renderer.render(v.website!);
-      else if (!home) { renderedHome = await renderer.render(v.website!); }
       if (renderedHome) { rendered++; home = renderedHome.html; }
       if (!home) continue;
       // Closed for good, says their own homepage: the place goes.
       if (CLOSED_FOR_GOOD.test((renderedHome?.text ?? htmlToText(home)).slice(0, 4000))) { closedIds.push(v.id); continue; }
       const pages: [string, string, string?][] = [[v.website!, home, renderedHome?.text]];
       // Every tab of the site's menu bar.
-      for (const url of siteLinks(home, v.website!)) {
+      // Fetched side by side; on a JavaScript-built site at most 3 tabs are opened in the browser.
+      let renderTabs = 3;
+      const tabs = await Promise.all(siteLinks(home, v.website!).map(async (url): Promise<[string, string, string?] | null> => {
         let html = await get(url);
         let text: string | undefined;
-        if (renderedHome && (!html || builtByScript(html, htmlToText(html)))) {
+        if (renderedHome && renderTabs > 0 && (!html || builtByScript(html, htmlToText(html)))) {
+          renderTabs--;
           const r = await renderer.render(url);
           if (r) { rendered++; html = r.html; text = r.text; }
         }
-        if (html) pages.push([url, html, text]);
-      }
+        return html ? [url, html, text] : null;
+      }));
+      for (const t of tabs) if (t) pages.push(t);
       pagesRead += pages.length;
       // Web pages, plus PDF menus linked from them (text, or OCR when the PDF is only pictures).
       const docs: { url: string; text: string; menu: boolean; menuDate?: string }[] = pages.map(([url, html, renderedText]) => {
         const text = renderedText ?? htmlToText(html);
-        return { url, text, menu: /menu|drink|beer|tap|κατ[αά]λογ|μεν[οού]|ποτ[αά]|μπ[υύ]ρ/iu.test(decodeURI(url)) || /\bon tap\b|draft list|beer list|craft beer|κατάλογος|μπύρες|βαρέλι/iu.test(text) };
+        return { url, text, menu: /menu|drink|beer|tap|κατ[αά]λογ|μεν[οού]|ποτ[αά]|μπ[υύ]ρ/iu.test(safeDecode(url)) || /\bon tap\b|draft list|beer list|craft beer|κατάλογος|μπύρες|βαρέλι/iu.test(text) };
       });
       // A menu PDF that fails to download today: keep this place's previous prices rather than wiping them.
       let pdfFailed = false;
@@ -195,11 +205,15 @@ export async function crawlVenueSites(venues: BeerVenue[], log: (m: string) => v
       const addFood = (f: FoundFood, url: string, dated: { menuDate?: string }, w?: { days: number[]; start: string; end: string }) => {
         if (foodHere >= 15) return;
         const id = `web:${v.id}:food:${f.item}:${f.price}`;
-        if (prices.some((x) => x.id === id)) return;
+        const lc = f.item.toLowerCase();
+        // "Beach Club Monday Burger Mondays $8" and "Burger Mondays $8" are the same deal.
+        if (prices.some((x) => x.id === id || (x.venueId === v.id && x.category === 'food' && x.price === f.price && (x.item.toLowerCase().endsWith(lc) || lc.endsWith(x.item.toLowerCase()))))) return;
+        // A day in the name ("Taco Tuesday", "Wing Wednesday") is that day's special, not part of a happy hour.
+        const dayDeal = /\b(?:mon|tues|wednes|thurs|fri|satur|sun)days?\b/i.test(f.item) ? parseDays(f.item) : null;
         prices.push({
-          id, venueId: v.id, item: f.item, price: f.price, category: 'food', kind: f.happyHour ? 'happy_hour' : 'regular',
+          id, venueId: v.id, item: f.item, price: f.price, category: 'food', kind: dayDeal ? 'special' : f.happyHour ? 'happy_hour' : 'regular',
           ...(f.withBeer ? { withBeer: true } : {}), ...(f.addOn ? { addOn: true } : {}),
-          ...(f.happyHour && w ? { days: w.days, start: w.start, end: w.end } : {}),
+          ...(dayDeal ? { days: dayDeal } : f.happyHour && w ? { days: w.days, start: w.start, end: w.end } : {}),
           source: 'website', sourceUrl: url, snippet: f.text.slice(0, 200), reportedAt: now, ...dated,
         });
         foodHere++; foodFound++;
@@ -251,6 +265,10 @@ export async function crawlVenueSites(venues: BeerVenue[], log: (m: string) => v
         }
       }
       if (found) withInfo++;
+      } catch (e) {
+        failedSites++;
+        if (failedSites <= 5) log(`skipped ${v.website}: ${(e as Error).message?.slice(0, 120)}`);
+      }
     }
   }
   try {
@@ -260,7 +278,7 @@ export async function crawlVenueSites(venues: BeerVenue[], log: (m: string) => v
     await renderer.close();
   }
   const beerCount = prices.filter((p) => p.category !== 'food').length;
-  log(`checked ${targets.length} websites (${pagesRead} pages, ${rendered} opened in a browser, ${pdfsRead} PDF menus, ${pdfsOcr} read with OCR), found info on ${withInfo}: ${happyHours.length} happy hours, ${beerCount} beer prices, ${foodFound} food prices`);
+  log(`checked ${targets.length} websites (${pagesRead} pages, ${rendered} opened in a browser, ${pdfsRead} PDF menus, ${pdfsOcr} read with OCR), found info on ${withInfo}: ${happyHours.length} happy hours, ${beerCount} beer prices, ${foodFound} food prices${failedSites ? `, ${failedSites} sites skipped after an error` : ''}`);
   if (closedIds.length) log(`${closedIds.length} places say on their website that they've closed for good`);
   return { prices, happyHours, sitesTried: targets.length, sitesWithInfo: withInfo, readIds, closedIds };
 }
