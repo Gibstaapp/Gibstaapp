@@ -27,6 +27,17 @@ export function weedArea(region: WeedRegion): SearchArea {
   return { lat: c.lat, lng: c.lng, radiusMiles: c.miles, zip: DEFAULT_ZIP[region], state: STATE[region] };
 }
 
+/**
+ * Why a source's answer can't be trusted (so the city keeps that source's previous data), or null if it's fine.
+ * - stores but not a single product: every menu failed (e.g. the site blocked us)
+ * - no stores at all where it had stores before: a shop count doesn't drop to zero overnight
+ */
+export function untrusted(r: Pick<SourceResult, 'stores' | 'products'>, storesBefore: number): string | null {
+  if (r.stores.length > 0 && r.products.length === 0) return `listed ${r.stores.length} stores but read no menus`;
+  if (r.stores.length === 0 && storesBefore > 0) return `returned no stores (had ${storesBefore} before)`;
+  return null;
+}
+
 const inRegion = (region: WeedRegion) => (s: Pick<Store, 'lat' | 'lng'>) => weedRegionAt(s) === region;
 
 function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
@@ -76,8 +87,9 @@ function refreshWeedRegion(region: WeedRegion): Promise<RefreshStatus> {
       const log = (m: string) => console.log(`[${tag}${a.id}] ${m}`);
       try {
         const r = await withTimeout(a.fetchAll(area, log), config.sourceTimeoutMs, a.id);
-        // Stores but not a single product: every menu failed (e.g. the site blocked us). Keep yesterday's prices.
-        if (r.stores.length > 0 && r.products.length === 0) throw new Error(`listed ${r.stores.length} stores but read no menus`);
+        // An answer that can't be right keeps yesterday's prices.
+        const bad = untrusted(r, oldStores.filter((s) => s.sources.some((x) => x.source === a.id)).length);
+        if (bad) throw new Error(bad);
         // Only stores that are really in this city (a source can return a few from far away).
         const keep = new Set(r.stores.filter(mine).map((s) => s.id));
         results.push({ stores: r.stores.filter((s) => keep.has(s.id)), products: r.products.filter((p) => keep.has(p.storeId)), deals: r.deals.filter((d) => keep.has(d.storeId)) });
