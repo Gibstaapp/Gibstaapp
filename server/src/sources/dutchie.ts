@@ -753,6 +753,8 @@ async function run(page: Page, area: SearchArea, log: (msg: string) => void): Pr
     }
     await pause();
   });
+  // Shops found but not one menu read (e.g. Dutchie started refusing our queries): that's a failure, not "no shops".
+  if (candidates.length > 0 && stores.length === 0) throw new Error(`found ${candidates.length} shops but read no menus`);
   return { stores, products, deals };
 }
 

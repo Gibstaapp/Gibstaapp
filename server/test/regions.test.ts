@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { AREAS, ATHENS_POSTCODES, MAX_RESULT_MILES, NYC_ZIPS, REGIONS, REGION_ORDER, SD_ZIPS, distanceChoices, fmtDistance, fmtNear, regionAt, regionOf, weedRegionAt, type Product, type Store } from '@gib/shared';
 import { DEFAULT_PROFILE } from '../src/db.ts';
 import { computeTax } from '../src/pricing/taxes.ts';
-import { mergeWeedStatus } from '../src/refresh.ts';
+import { mergeWeedStatus, untrusted } from '../src/refresh.ts';
 import { mergeWeed } from '../src/merge-weed.ts';
 import { openState } from '../src/hours.ts';
 import { ouncesOf, rankVenues } from '../src/beer/rank.ts';
@@ -235,5 +235,19 @@ describe('New York weed list is New York State only', () => {
       status: { running: false, sources: [{ source: 'weedmaps' as const, region: 'nyc' as const, ok: true, stores: 2, products: 2, finishedAt: '2026-11-13T00:00:00Z' }] } };
     const m = mergeWeed([snap])!;
     expect(m.stores.map((s) => s.id)).toEqual(['nyc']);
+  });
+});
+
+describe('a weed source whose answer cannot be right keeps its previous data', () => {
+  const store = { id: 's1' } as Store, product = { id: 'p1' } as Product;
+  it('no stores at all where it had stores yesterday (Dutchie NYC, Nov 28: 60 shops found, every menu refused)', () => {
+    expect(untrusted({ stores: [], products: [] }, 57)).toMatch(/no stores/);
+  });
+  it('stores but no products', () => {
+    expect(untrusted({ stores: [store], products: [] }, 0)).toMatch(/no menus/);
+  });
+  it('a normal answer, or a source that never had stores here', () => {
+    expect(untrusted({ stores: [store], products: [product] }, 57)).toBeNull();
+    expect(untrusted({ stores: [], products: [] }, 0)).toBeNull();
   });
 });
